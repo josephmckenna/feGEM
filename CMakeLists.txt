@@ -53,36 +53,50 @@ include_directories($ENV{MIDASSYS}/mxml)
 set(LIB midas rt mfe)
 set(LIBS  m z util nsl pthread)
 
+
 #add_executable(mlu_gen)
-add_executable(feevb feevb TsSync tmodb tmfe)
-target_link_libraries(feevb ${LIB} ${LIBS} )
+add_executable(feevb.exe feevb TsSync tmodb tmfe)
+target_link_libraries(feevb.exe ${LIB} ${LIBS} )
 
 
-add_executable(mlu_gen mlu_gen)
+add_executable(mlu_gen.exe mlu_gen)
 
-add_executable(fexudp fexudp tmodb tmfe)
-target_link_libraries(fexudp ${LIB} ${LIBS} )
+add_executable(fexudp.exe fexudp tmodb tmfe)
+target_link_libraries(fexudp.exe ${LIB} ${LIBS} )
 
-add_executable(fecaenr14xxet fecaenr14xxet KOtcp tmfe tmodb)
-target_link_libraries(fecaenr14xxet ${LIB} ${LIBS} )
+add_executable(fecaenr14xxet.exe fecaenr14xxet KOtcp tmfe tmodb)
+target_link_libraries(fecaenr14xxet.exe ${LIB} ${LIBS} )
 
-add_executable(fewienerlvps fewienerlvps tmfe tmodb)
-target_link_libraries(fewienerlvps ${LIB} ${LIBS} )
+add_executable(fewienerlvps.exe fewienerlvps tmfe tmodb)
+target_link_libraries(fewienerlvps.exe ${LIB} ${LIBS} )
 
-add_executable(femoxa femoxa KOtcp tmfe tmodb)
-target_link_libraries(femoxa ${LIB} ${LIBS} )
+add_executable(femoxa.exe femoxa KOtcp tmfe tmodb)
+target_link_libraries(femoxa.exe ${LIB} ${LIBS} )
 
-add_executable(fegastelnet fegastelnet KOtcp tmfe tmodb)
-target_link_libraries(fegastelnet ${LIB} ${LIBS} )
+add_executable(fegastelnet.exe fegastelnet KOtcp tmfe tmodb)
+target_link_libraries(fegastelnet.exe ${LIB} ${LIBS} )
 
-add_executable(fectrl fectrl KOtcp tmfe tmodb)
-target_link_libraries(fectrl ${LIB} ${LIBS} )
+add_executable(fectrl.exe fectrl KOtcp tmfe tmodb)
+target_link_libraries(fectrl.exe ${LIB} ${LIBS} )
 
-add_executable(febvlvdb febvlvdb KOtcp JsonTo EsperComm febvlvdb tmfe tmodb)
-target_link_libraries(febvlvdb ${LIB} ${LIBS} )
+add_executable(febvlvdb.exe febvlvdb KOtcp JsonTo EsperComm febvlvdb tmfe tmodb)
+target_link_libraries(febvlvdb.exe ${LIB} ${LIBS} )
 
 
-add_executable(test_tcp KOtcp)
-target_compile_definitions(test_tcp PRIVATE MAIN)
-target_link_libraries(test_tcp ${LIB} ${LIBS} )
+add_executable(test_tcp.exe KOtcp)
+target_compile_definitions(test_tcp.exe PRIVATE MAIN)
+target_link_libraries(test_tcp.exe ${LIB} ${LIBS} )
 
+#A little clunky:
+install(TARGETS 
+feevb.exe
+mlu_gen.exe
+fexudp.exe
+fecaenr14xxet.exe
+fewienerlvps.exe
+femoxa.exe
+fegastelnet.exe
+fectrl.exe
+febvlvdb.exe
+test_tcp.exe
+ DESTINATION "${CMAKE_INSTALL_PREFIX}/frontends")
