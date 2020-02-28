@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html class="mcss">
+<head>
+   <meta charset="UTF-8">
+   <link rel="stylesheet" href="midas.css">
+   <script src="midas.js"></script>
+   <script src="mhttpd.js"></script>
+   <title>EVB</title> <!-- Change XXX to page title -->
+</head>
+
+<body class="mcss" onload="mhttpd_init('EVB')"> <!-- Change XXX to the menu item for this page -->
+
+<!-- header and side navigation will be filled automatically in mhttpd_start -->
+<div id="mheader"></div>
+<div id="msidenav"></div>
+
+<div id="mmain">
+<div id="obscure_div">
+  <table class="mtable">
+    <tr>
+      <th class="mtableheader">EVB</th> <!-- Change XXX to the header name for this page -->
+    </tr>
+    <tr>
+      <td>
+	<div align=center>
+	  <table align=center>
+	    <tr align=center>
+	      <td>Dead</td>
+	      <td>Input</td>
+	      <td>Complete</td>
+	      <td>Incomplete</td>
+	      <td>Bypass</td>
+	      <td>sync_ok</td>
+	      <td>sync_failed</td>
+	      <td>sync_overflow</td>
+	    </tr>
+	    <tr align=center>
+	      <td id=dead>Dead</td>
+	      <td id=input>Input</td>
+	      <td id=complete>Complete</td>
+	      <td id=incomplete>Incomplete</td>
+	      <td id=bypass>Bypass</td>
+	      <td id=sync_ok>sync_ok</td>
+	      <td id=sync_failed>sync_failed</td>
+	      <td id=sync_overflow>sync_overflow</td>
+	    </tr>
+	  </table>
+	</div>
+    </tr>
+    <tr>
+      <td>
+	<div align=center>
+	  <table id="datatable" align=center>
+	    <tr align=center>
+	      <td>Slot</td>
+	      <td>Name</td>
+	      <td>Dead</td>
+	      <td>Incomplete count</td>
+	      <td>Errors</td>
+	      <td>Packets count</td>
+	      <td>Bytes count</td>
+	      <td>Packets per second</td>
+	      <td>Bytes per second</td>
+	      <td>Sent min</td>
+	      <td>Sent max</td>
+	      <td>Sent ave</td>
+	    </tr>
+	    <tr id="datatable_last" align=center>
+	    </tr>
+	  </table>
+	</div>
+    </tr>
+    <tr>
+      <div>
+	<table class="mtable" align=center>
+	  <tr align=center>
+	    <td class="mtableheader" colspan=2>Common settings</td>
+	  </tr>
+<!---
+	  <tr align=center>
+	    <td>enable</td>
+	    <td id=enable>enable</td>
+	  </tr>
+	  <tr align=center>
+	    <td>enable_boot_user_page</td>
+	    <td id=enable_boot_user_page>enable_boot_user_page</td>
+	  </tr>
+	  <tr align=center>
+	    <td>enable_trigger</td>
+	    <td id=enable_trigger>enable_trigger</td>
+	  </tr>
+	  <tr align=center>
+	    <td>clkin_sel</td>
+	    <td id=clkin_sel>clkin_sel</td>
+	  </tr>
+	  <tr align=center>
+	    <td>trig_delay</td>
+	    <td id=trig_delay>trg_delay</td>
+	  </tr>
+	  <tr align=center>
+	    <td>sca_gain</td>
+	    <td id=sca_gain>sca_gain</td>
+	  </tr>
+--->
+	  <tr align=center>
+	    <td>ODB EVB settings</td>
+	    <td><a href="/Equipment/EVB/Settings">Settings</a></td>
+	  </tr>
+	  <tr align=center>
+	    <td>ODB EVB status</td>
+	    <td><a href="/Equipment/EVB/EvbStatus">EvbStatus</a></td>
+	  </tr>
+	</table>
+      </div>
+    </tr>
+    <tr>
+      <div id="updateStatus" align="left">
+        updateStatus
+      </div>
+    </tr>
+    
+    <script>
+      var update_timer_id;
+
+      function update_settings()
+      {
+      console.log("update_settings!");
+      jrpc("update_settings", "");
+      }
+
+    function set_text(id, text)
+    {
+       var e = document.getElementById(id);
+       if (e)
+          e.innerHTML = text;
+    }
+
+    function set_text_yn(id, yn)
+    {
+       var e = document.getElementById(id);
+       if (e) {
+          if (yn) {
+             e.innerHTML = "y";
+          } else {
+             e.innerHTML = "-";
+          }
+       }
+    }
+
+    function set_colour(id, colour)
+    {
+       var e = document.getElementById(id);
+       if (e) {
+          e.style["background-color"] = colour;
+       }
+    }
+
+    function create_row(i)
+    {
+       var id = "row" + i;
+       var tr = document.createElement("tr");
+       tr.id = id;
+       var td = document.createElement("td"); td.id = "slot"+i; td.align="center"; tr.appendChild(td);
+       var td = document.createElement("td"); td.id = "name"+i; td.align="center"; tr.appendChild(td);
+       var td = document.createElement("td"); td.id = "dead"+i; td.align="center"; tr.appendChild(td);
+       var td = document.createElement("td"); td.id = "incomplete"+i; td.align="center"; tr.appendChild(td);
+       var td = document.createElement("td"); td.id = "errors"+i; td.align="center"; tr.appendChild(td);
+       var td = document.createElement("td"); td.id = "packets"+i; td.align="right"; tr.appendChild(td);
+       var td = document.createElement("td"); td.id = "bytes"+i; td.align="right"; tr.appendChild(td);
+       var td = document.createElement("td"); td.id = "pps"+i; td.align="right"; tr.appendChild(td);
+       var td = document.createElement("td"); td.id = "bps"+i; td.align="right"; tr.appendChild(td);
+       var td = document.createElement("td"); td.id = "smin"+i; td.align="center"; tr.appendChild(td);
+       var td = document.createElement("td"); td.id = "smax"+i; td.align="center"; tr.appendChild(td);
+       var td = document.createElement("td"); td.id = "save"+i; td.align="center"; tr.appendChild(td);
+       var last = document.getElementById("datatable_last");
+       //document.getElementById("datatable").insertBefore(tr, last);
+       last.insertAdjacentElement("beforebegin", tr);
+    }
+
+    function callback(rpc)
+    {
+       //console.log("callback!");
+       document.getElementById("obscure_div").style.backgroundColor = "";
+       //document.getElementById('updateStatus').innerHTML = "RWP_";
+       
+       //alert("Hello: " + JSON.stringify(rpc));
+       //console.log("rpc: " + JSON.stringify(rpc));
+
+       var paths = [ "/Equipment/EVB/Settings", "/Equipment/EVB/Variables" , "/Equipment/CTRL/EvbConfig", "/Equipment/EVB/EvbStatus" ];
+       
+       var s = rpc.result.data[0];
+       var v = rpc.result.data[1];
+       var config = rpc.result.data[2];
+       var status = rpc.result.data[3];
+
+       //set_text_yn("enable", s.enable);
+       //set_text_yn("enable_boot_user_page", s.enable_boot_user_page);
+       //set_text_yn("enable_trigger", s.enable_trigger);
+       //set_text("clkin_sel", s.clkin_sel);
+       //set_text("trig_delay", s.trig_delay);
+       //set_text("sca_gain", s.sca_gain);
+
+       set_text("dead", status.count_dead_slots);
+       set_text("input", status.events_in);
+       set_text("complete", status.complete);
+       set_text("incomplete", status.incomplete);
+       set_text("bypass", status.bypass);
+       set_text("sync_ok", status.sync_ok);
+       set_text("sync_failed", status.sync_failed);
+       set_text("sync_overflow", status.sync_overflow);
+
+       if (status.count_dead_slots > 0) {
+          set_colour("dead", "yellow");
+       } else {
+          set_colour("dead", "");
+       }
+       
+       if (status.incomplete > 0) {
+          set_colour("incomplete", "yellow");
+       } else {
+          set_colour("incomplete", "");
+       }
+       
+       if (status.bypass > 0) {
+          set_colour("bypass", "yellow");
+       } else {
+          set_colour("bypass", "");
+       }
+       
+       for (var i=0; i<status.names.length; i++) {
+          var row = document.getElementById("row" + i);
+          if (!row) {
+             create_row(i);
+          }
+
+          set_text("slot"+i, i);
+          set_text("name"+i, status.names[i]);
+          set_text("dead"+i, status.dead[i]);
+          set_text("incomplete"+i, status.incomplete_count[i]);
+          set_text("errors"+i, status.errors[i]);
+          set_text("packets"+i, status.packets_count[i]);
+          set_text("bytes"+i, status.bytes_count[i]);
+          set_text("pps"+i, status.packets_per_second[i].toFixed(0));
+          set_text("bps"+i, status.bytes_per_second[i].toFixed(0));
+
+          set_text("smin"+i, status.sent_min[i]);
+          set_text("smax"+i, status.sent_max[i]);
+          set_text("save"+i, status.sent_ave[i].toFixed(2));
+
+          //      set_colour("user_page"+i, "gray");
+          //set_text("acc_trig"+i, v.pwb_trigger_total_accepted[i].toFixed(0));
+          //set_text("drop_trig"+i, v.pwb_trigger_total_dropped[i].toFixed(0));
+       }
+       
+       //document.getElementById('mhttpd_last_updated').innerHTML = new Date;
+       //document.getElementById('updateStatus').innerHTML = "RWPD";
+       document.getElementById('updateStatus').innerHTML = "";
+    }
+
+    function update()
+    {
+       //console.log("update!");
+       var paths = [ "/Equipment/EVB/Settings", "/Equipment/EVB/Variables" , "/Equipment/CTRL/EvbConfig", "/Equipment/EVB/EvbStatus" ];
+       //document.getElementById('updateStatus').innerHTML = "R___";
+       mjsonrpc_db_get_values(paths).then(function(rpc) {
+          callback(rpc);
+       }).catch(function(error) {
+          document.getElementById('updateStatus').innerHTML = "RWE: RPC or JS error: " + mjsonrpc_decode_error(error);
+       });
+       //document.getElementById('updateStatus').innerHTML = "RW__";
+    }
+    
+
+    function update_periodic()
+    {
+       clearTimeout(update_timer_id);
+       var update_period = 1000;
+       update();
+       update_timer_id = setTimeout('update_periodic()', update_period);
+    }
+    
+    update_periodic();
+    </script>
+  </table>
+</div>
+</div>
+</body>
+</html>
