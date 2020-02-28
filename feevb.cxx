@@ -28,6 +28,7 @@
 
 #include "tmvodb.h"
 #include "tmfe.h"
+#include "mfe.h"
 
 #include "atpacket.h"
 
@@ -39,15 +40,13 @@ static TMVOdb* gEvbStatus = NULL; // ODB /Eq/EVB/EvbStatus
 const char *frontend_name = "feevb";                     /* fe MIDAS client name */
 const char *frontend_file_name = __FILE__;               /* The frontend file name */
 
-extern "C" {
    BOOL frontend_call_loop = TRUE;       /* frontend_loop called periodically TRUE */
    int display_period = 0;               /* status page displayed with this freq[ms] */
    int max_event_size = 38*1024*1024;     /* max event size produced by this frontend */
    int max_event_size_frag = 5 * 1024 * 1024;     /* max for fragmented events */
    int event_buffer_size = 1000*1024*1024;           /* buffer size to hold events */
-}
 
-extern "C" {
+
   int interrupt_configure(INT cmd, INT source, PTYPE adr);
   INT poll_event(INT source, INT count, BOOL test);
   int frontend_init();
@@ -59,7 +58,7 @@ extern "C" {
   int frontend_loop();
   int read_event(char *pevent, INT off);
   void report_evb_unlocked();
-}
+
 
 #ifndef EQ_NAME
 #define EQ_NAME "EVB"
@@ -82,7 +81,7 @@ EQUIPMENT equipment[] = {
 ////////////////////////////////////////////////////////////////////////////
 
 static int verbose = 0;
-static HNDLE hDB;
+extern HNDLE hDB;
 
 ////////////////////////////////////////////////////////////////////////////
 //                     UNPACKING OF ALPHA16 DATA
