@@ -78,9 +78,19 @@ test_tcp.exe: KOtcp.cxx
 #ModbusTcp.o: %.o: $(MODBUS_DIR)/%.cxx
 #	$(CXX) -o $@ $(CFLAGS) -c $<
 
-feXsequencer.exe: $(LIB) $(LIB_DIR)/mfe.o feXsequencer.o tmodb.o tmfe.o 
+feXsequencer.exe:
+	make feAsequencer.exe
+	make feBsequencer.exe
+	make feCsequencer.exe
+	make feDsequencer.exe
+	make feEsequencer.exe
+
+fe%sequencer.exe: $(LIB) $(LIB_DIR)/mfe.o fe%sequencer.o tmodb.o tmfe.o 
 	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS)
 #	$(CXX) -o $@ $(CFLAGS)  $^ $(LIB) $(LIBS)
+
+fe%sequencer.o: feXsequencer.cxx
+	$(CXX) -o $@ $(CFLAGS) -DSEQID=\"$*\" -c $<
 
 %.o: %.cxx
 	$(CXX) -o $@ $(CFLAGS) -c $<

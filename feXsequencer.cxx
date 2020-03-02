@@ -51,7 +51,7 @@ std::vector<std::string> allowed_hosts;
 static TMVOdb* gSeqSettings = NULL; // ODB /Equipment/sequencerB/Settings/
 static TMVOdb* gExpSettings = NULL; // ODB /Equipment/sequencerB/Settings/
 /* The frontend name (client name) as seen by other MIDAS clients   */
-const char *frontend_name = "feBsequencer";
+const char *frontend_name = "fe" SEQID "sequencer";
 /* The frontend file name, don't change it */
 const  char *frontend_file_name = __FILE__;
 
@@ -91,7 +91,7 @@ const  char *frontend_file_name = __FILE__;
   
 EQUIPMENT equipment[] = {
 
-    {"SequencerB",               /* equipment name */
+    {"Sequencer" SEQID,               /* equipment name */
      { EVID_SEQUENCER, (1<<EVID_SEQUENCER), /* event ID, trigger mask */
       "SYSTEM",               /* event buffer */
       EQ_POLLED,              /* equipment type */
@@ -152,7 +152,7 @@ INT frontend_init()
 
    std::vector<std::string> name;
 
-   gSeqSettings->Chdir("/Equipment/sequencerB/Settings/", true);
+   gSeqSettings->Chdir("/Equipment/sequencer" SEQID "/Settings/", true);
    gSeqSettings->RSA("allowed_hosts", &allowed_hosts, true, 0, 0);
 
    //odbReadString("/Equipment/sequencerB/Settings/allowed_hosts", 0, "localhost", 250);
@@ -187,7 +187,7 @@ INT frontend_init()
       cm_msg(MINFO, "frontend_init", "Allowed hosts: %s", s.c_str());
    }
 
-   int listen_port=12025;
+   int listen_port=12020 + ((int)*SEQID-(int)'A');
    gExpSettings->Chdir("/experiment",false);
    std::string experiment_name;
    gExpSettings->RS("name", 0, &experiment_name, false);
@@ -305,14 +305,14 @@ struct LabviewSocket
         if( t == gPreviousTimestamp )
           {
             //            sprintf(fname,"/home/alpha/online/sequencerB_2012/sequencerB%d_%d.dat",(int)t, gCountTimestampClashes );
-            sprintf(fname,"/home/alpha/online/sequencerB/sequencerB%d_%d.dat",(int)t, gCountTimestampClashes );
+            sprintf(fname,"/home/alpha/online/sequencerB/sequencer" SEQID "%d_%d.dat",(int)t, gCountTimestampClashes );
             gCountTimestampClashes++;
           }
         else
           {           
             gCountTimestampClashes = 1;
             //            sprintf(fname,"/home/alpha/online/sequencerB_2012/sequencerB%d_0.dat",(int)t);
-            sprintf(fname,"/home/alpha/online/sequencerB/sequencerB%d_0.dat",(int)t);
+            sprintf(fname,"/home/alpha/online/sequencerB/sequencer" SEQID "%d_0.dat",(int)t);
             // ofd = open(fname,O_WRONLY|O_CREAT|O_LARGEFILE,0777);
             // printf("Socket %d data saved to %s\n",socket,fname);
           }
