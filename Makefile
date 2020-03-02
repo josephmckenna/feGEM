@@ -28,6 +28,7 @@ all:: test_tcp.exe
 #all:: grifc.exe
 all:: mlu_gen.exe
 all::febvlvdb.exe
+all::feXsequencer.exe
 
 #fealpha16.exe: $(LIB) $(LIB_DIR)/mfe.o fealpha16.o mscbcxx.o
 #	$(CXX) -o $@ $(CFLAGS) $^ $(LIB) $(LDFLAGS) $(LIBS)
@@ -76,6 +77,10 @@ test_tcp.exe: KOtcp.cxx
 #
 #ModbusTcp.o: %.o: $(MODBUS_DIR)/%.cxx
 #	$(CXX) -o $@ $(CFLAGS) -c $<
+
+feXsequencer.exe: $(LIB) $(LIB_DIR)/mfe.o feXsequencer.o tmodb.o tmfe.o 
+	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS)
+#	$(CXX) -o $@ $(CFLAGS)  $^ $(LIB) $(LIBS)
 
 %.o: %.cxx
 	$(CXX) -o $@ $(CFLAGS) -c $<
