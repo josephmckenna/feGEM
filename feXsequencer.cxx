@@ -25,7 +25,13 @@
 #undef USE_ROOT
 
 #include "midas.h"
-#include "evid.h"
+#include "msystem.h" // rb_get_buffer_level()
+
+
+
+#include "tmvodb.h"
+#include "tmfe.h"
+#include "mfe.h"
 
 #include <vector>
 #include <string>
@@ -35,19 +41,19 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#define EVID_SEQUENCER 8
+
 std::vector<std::string> allowed_hosts;
 
 /* make frontend functions callable from the C framework */
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /*-- Globals -------------------------------------------------------*/
-
+static TMVOdb* gSeqSettings = NULL; // ODB /Equipment/sequencerB/Settings/
+static TMVOdb* gExpSettings = NULL; // ODB /Equipment/sequencerB/Settings/
 /* The frontend name (client name) as seen by other MIDAS clients   */
-   char *frontend_name = "feBsequencer";
+const char *frontend_name = "feBsequencer";
 /* The frontend file name, don't change it */
-   char *frontend_file_name = __FILE__;
+const  char *frontend_file_name = __FILE__;
 
 /* frontend_loop is called periodically if this variable is TRUE    */
    BOOL frontend_call_loop = FALSE;
@@ -68,13 +74,13 @@ extern "C" {
   extern HNDLE hDB;
 
 /*-- Function declarations -----------------------------------------*/
-  INT frontend_init();
-  INT frontend_exit();
-  INT begin_of_run(INT run_number, char *error);
-  INT end_of_run(INT run_number, char *error);
-  INT pause_run(INT run_number, char *error);
-  INT resume_run(INT run_number, char *error);
-  INT frontend_loop();
+  int frontend_init();
+  int frontend_exit();
+  int begin_of_run(int run, char *err);
+  int end_of_run(int run, char *err);
+  int pause_run(int run, char *err);
+  int resume_run(int run, char *err);
+  int frontend_loop();
   
   INT read_event(char *pevent, INT off);
   int openListenSocket(int port);
@@ -83,7 +89,7 @@ extern "C" {
 
 /*-- Equipment list ------------------------------------------------*/
   
-  EQUIPMENT equipment[] = {
+EQUIPMENT equipment[] = {
 
     {"SequencerB",               /* equipment name */
      { EVID_SEQUENCER, (1<<EVID_SEQUENCER), /* event ID, trigger mask */
@@ -100,17 +106,12 @@ extern "C" {
       "", "", "",}
      ,
      read_event,      /* readout routine */
-     NULL, NULL,
-     NULL,       /* bank list */
     }
     ,
     
     {""}
   };
-  
-#ifdef __cplusplus
-}
-#endif
+
 /********************************************************************\
               Callback routines for system transitions
 
@@ -136,65 +137,69 @@ extern "C" {
   resume_run:     When a run is resumed. Should enable trigger events.
 \********************************************************************/
 
-#include "utils.cxx"
+//#include "utils.cxx"
 
 /*-- Frontend Init -------------------------------------------------*/
 
 INT frontend_init()
 {
-  int status;
+   int status;
 
-  setbuf(stdout,NULL);
-  setbuf(stderr,NULL);
+   setbuf(stdout,NULL);
+   setbuf(stderr,NULL);
 
- allowed_hosts.push_back("localhost");
-#if 0
-  allowed_hosts.push_back("alphadaq.cern.ch");
-  allowed_hosts.push_back("alphacpc39.cern.ch");
-  allowed_hosts.push_back("alphacpc23.cern.ch");
-  allowed_hosts.push_back("alphaswansea01.cern.ch");
-  allowed_hosts.push_back("alphacpc36.cern.ch");
-  allowed_hosts.push_back("alphacriomcs.cern.ch");
-  allowed_hosts.push_back("alphacrio01.cern.ch");
-#endif
+   allowed_hosts.push_back("localhost");
 
-  odbReadString("/Equipment/sequencerB/Settings/allowed_hosts", 0, "localhost", 250);
-  odbResizeArray("/Equipment/sequencerB/Settings/allowed_hosts", TID_STRING, 10);
+   std::vector<std::string> name;
 
-  int sz = odbReadArraySize("/Equipment/sequencerB/Settings/allowed_hosts");
-  int last = 0;
-  for (int i=0; i<sz; i++) {
-    const char* s = odbReadString("/Equipment/sequencerB/Settings/allowed_hosts", i, NULL, 250);
-    if (strlen(s) < 1)
-      continue;
-    if (s[0] == '#')
-      continue;
-    printf("allowed_hosts %d [%s]\n", i, s);
-    allowed_hosts.push_back(s);
-    last = i;
-  }
+   gSeqSettings->Chdir("/Equipment/sequencerB/Settings/", true);
+   gSeqSettings->RSA("allowed_hosts", &allowed_hosts, true, 0, 0);
 
-  if (sz - last < 10)
-    odbResizeArray("/Equipment/sequencerB/Settings/allowed_hosts", TID_STRING, last+10);
+   //odbReadString("/Equipment/sequencerB/Settings/allowed_hosts", 0, "localhost", 250);
+   //odbResizeArray("/Equipment/sequencerB/Settings/allowed_hosts", TID_STRING, 10);
 
-  if (1) {
-    std::string s = "";
-    for (unsigned i=0; i<allowed_hosts.size(); i++) {
-      if (i>0)
-        s += ", ";
-      s += allowed_hosts[i];
-    }
-    
-    cm_msg(MINFO, "frontend_init", "Allowed hosts: %s", s.c_str());
-  }
-  if( !strcmp(odbReadString("/experiment/name", 0, NULL, 250),"agdaq") )
-    status = openListenSocket(odbReadUint32("/equipment/sequencerB/Settings/tcp_port",0,12125));
-  else
-    status = openListenSocket(odbReadUint32("/equipment/sequencerB/Settings/tcp_port",0,12025));
-  if (status != FE_SUCCESS)
-    return status;
+   //int sz = odbReadArraySize("/Equipment/sequencerB/Settings/allowed_hosts");
+   //int last = 0;
+   //for (int i=0; i<sz; i++) 
+   //{
+   //   const char* s = odbReadString("/Equipment/sequencerB/Settings/allowed_hosts", i, NULL, 250);
+   //   if (strlen(s) < 1)
+   //      continue;
+   //   if (s[0] == '#')
+   //      continue;
+   //   printf("allowed_hosts %d [%s]\n", i, s);
+   //   allowed_hosts.push_back(s);
+   //   last = i;
+   //}
 
-  return FE_SUCCESS;
+   //if (sz - last < 10)
+   //   odbResizeArray("/Equipment/sequencerB/Settings/allowed_hosts", TID_STRING, last+10);
+
+   if (1)
+   {
+      std::string s = "";
+      for (unsigned i=0; i<allowed_hosts.size(); i++)
+      {
+         if (i>0)
+            s += ", ";
+         s += allowed_hosts[i];
+      }
+      cm_msg(MINFO, "frontend_init", "Allowed hosts: %s", s.c_str());
+   }
+
+   int listen_port=12025;
+   gExpSettings->Chdir("/experiment",false);
+   std::string experiment_name;
+   gExpSettings->RS("name", 0, &experiment_name, false);
+   if( !strcmp(experiment_name.c_str(),"agdaq") )
+   {
+      listen_port+=100;
+      gSeqSettings->RI("tcp_port",0,&listen_port,true);
+   }
+   status = openListenSocket(listen_port);
+   if (status != FE_SUCCESS)
+      return status;
+   return FE_SUCCESS;
 }
 
 static int gHaveRun = 0;
@@ -549,7 +554,7 @@ bool trySelect()
 }
 
 /*-- Trigger event routines ----------------------------------------*/
-extern "C" INT poll_event(INT source, INT count, BOOL test)
+INT poll_event(INT source, INT count, BOOL test)
 /* Polling routine for events. Returns TRUE if event
    is available. If test equals TRUE, don't return. The test
    flag is used to time the polling */
@@ -567,7 +572,7 @@ extern "C" INT poll_event(INT source, INT count, BOOL test)
 }
 
 /*-- Interrupt configuration ---------------------------------------*/
-extern "C" INT interrupt_configure(INT cmd, INT source, PTYPE adr)
+INT interrupt_configure(INT cmd, INT source, PTYPE adr)
 {
    switch (cmd) {
    case CMD_INTERRUPT_ENABLE:
@@ -616,7 +621,7 @@ void decodeData(char*pevent,char*buf,int bufLength)
       int status;
       HNDLE hdir = 0;
       HNDLE hkey;
-      char* name="/Experiment/Run Parameters/Comment";
+      const char* name="/Experiment/Run Parameters/Comment";
       
       status = db_find_key (hDB, hdir, name, &hkey);
       if (status != SUCCESS)
@@ -700,4 +705,12 @@ INT read_event(char *pevent, INT off)
   return bk_size(pevent);
 }
 
-//end
+
+
+/* emacs
+ * Local Variables:
+ * tab-width: 8
+ * c-basic-offset: 3
+ * indent-tabs-mode: nil
+ * End:
+ */
