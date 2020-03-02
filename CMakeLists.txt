@@ -87,6 +87,14 @@ add_executable(test_tcp.exe KOtcp)
 target_compile_definitions(test_tcp.exe PRIVATE MAIN)
 target_link_libraries(test_tcp.exe ${LIB} ${LIBS} )
 
+foreach( SEQID A B C D E F G )
+   #string(CONCAT BIN [fe $(SEQID) sequencer] )
+   set( BIN fe${SEQID}sequencer )
+   add_executable(${BIN}.exe feXsequencer  tmfe tmodb)
+   target_compile_definitions(${BIN}.exe PRIVATE SEQID=\"${SEQID}\")
+   target_link_libraries(${BIN}.exe ${LIB} ${LIBS} )
+endforeach( SEQID A B C D E F G )
+
 #A little clunky:
 install(TARGETS 
 feevb.exe
