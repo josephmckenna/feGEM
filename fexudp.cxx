@@ -337,7 +337,7 @@ public:
 
       std::vector<UdpPacket*> buf;
 
-      while (!fMfe->fShutdown) {
+      while (!fMfe->fShutdownRequested) {
          const int packet_size = 1500;
 
          if (p == NULL) {
@@ -468,8 +468,8 @@ int main(int argc, char* argv[])
    eqc->LogHistory = 0;
    eqc->Buffer = "BUFUDP";
    
-   TMFeEquipment* eq = new TMFeEquipment("XUDP");
-   eq->Init(mfe->fOdbRoot, eqc);
+   TMFeEquipment* eq = new TMFeEquipment(mfe,"XUDP",eqc);
+   eq->Init();
    eq->SetStatus("Starting...", "white");
 
    mfe->RegisterEquipment(eq);
@@ -492,16 +492,16 @@ int main(int argc, char* argv[])
    int udp_port_pwb_c = 50003;
    int udp_port_pwb_d = 50004;
 
-   xudp->fEq->fOdbEqSettings->RI("udp_port", 0, &udp_port, true);
-   xudp->fEq->fOdbEqSettings->RI("udp_port_adc", 0, &udp_port_adc, true);
-   xudp->fEq->fOdbEqSettings->RI("udp_port_pwb", 0, &udp_port_pwb, true);
+   xudp->fEq->fOdbEqSettings->RI("udp_port", &udp_port, true);
+   xudp->fEq->fOdbEqSettings->RI("udp_port_adc", &udp_port_adc, true);
+   xudp->fEq->fOdbEqSettings->RI("udp_port_pwb", &udp_port_pwb, true);
 
-   xudp->fEq->fOdbEqSettings->RI("udp_port_pwb_a", 0, &udp_port_pwb_a, true);
-   xudp->fEq->fOdbEqSettings->RI("udp_port_pwb_b", 0, &udp_port_pwb_b, true);
-   xudp->fEq->fOdbEqSettings->RI("udp_port_pwb_c", 0, &udp_port_pwb_c, true);
-   xudp->fEq->fOdbEqSettings->RI("udp_port_pwb_d", 0, &udp_port_pwb_d, true);
+   xudp->fEq->fOdbEqSettings->RI("udp_port_pwb_a", &udp_port_pwb_a, true);
+   xudp->fEq->fOdbEqSettings->RI("udp_port_pwb_b", &udp_port_pwb_b, true);
+   xudp->fEq->fOdbEqSettings->RI("udp_port_pwb_c", &udp_port_pwb_c, true);
+   xudp->fEq->fOdbEqSettings->RI("udp_port_pwb_d", &udp_port_pwb_d, true);
 
-   xudp->fEq->fOdbEqSettings->RI("max_buffer_packets", 0, &gMaxBufferPackets, true);
+   xudp->fEq->fOdbEqSettings->RI("max_buffer_packets", &gMaxBufferPackets, true);
 
    UdpReader* r = new UdpReader(mfe, eq);
    r->OpenSocket(udp_port);
@@ -545,7 +545,7 @@ int main(int argc, char* argv[])
 
    {
       int run_state = 0;
-      mfe->fOdbRoot->RI("Runinfo/State", 0, &run_state, false);
+      mfe->fOdbRoot->RI("Runinfo/State", &run_state, false);
       bool running = (run_state == 3);
       if (running) {
          xudp->HandleBeginRun();
@@ -558,7 +558,7 @@ int main(int argc, char* argv[])
 
    time_t next_periodic = time(NULL) + 1;
 
-   while (!mfe->fShutdown) {
+   while (!mfe->fShutdownRequested) {
       time_t now = time(NULL);
 
       if (now > next_periodic) {
@@ -598,7 +598,7 @@ int main(int argc, char* argv[])
             const int event_size = 30*1024*1024;
             static char event[event_size];
 
-            while (!mfe->fShutdown) {
+            while (!mfe->fShutdownRequested) {
                eq->ComposeEvent(event, event_size);
                eq->BkInit(event, sizeof(event));
 
@@ -653,7 +653,7 @@ int main(int argc, char* argv[])
       //printf("*** POLL MIDAS ***\n");
 
       mfe->PollMidas(10);
-      if (mfe->fShutdown)
+      if (mfe->fShutdownRequested)
          break;
    }
 

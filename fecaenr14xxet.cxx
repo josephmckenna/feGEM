@@ -59,7 +59,7 @@ public:
          
          mfe->SleepMSec(1);
          
-         if (mfe->fShutdown) {
+         if (mfe->fShutdownRequested) {
             mfe->Msg(MERROR, "Wait", "Shutdown command while waiting for reply to command: %s", explain);
             return false;
          }
@@ -92,7 +92,7 @@ public:
          
    std::string Exch(const char* cmd)
    {
-      if (mfe->fShutdown)
+      if (mfe->fShutdownRequested)
          return "";
       
       std::string ss = cmd;
@@ -165,7 +165,7 @@ public:
 
    void WR(const char* name, const char* v)
    {
-      if (mfe->fShutdown)
+      if (mfe->fShutdownRequested)
          return;
       
       std::string path;
@@ -182,7 +182,7 @@ public:
          
    void WVD(const char* name, const std::vector<double> &v)
    {
-      if (mfe->fShutdown)
+      if (mfe->fShutdownRequested)
          return;
       
       std::string path;
@@ -199,7 +199,7 @@ public:
          
    void WRStat(const std::vector<double> &stat)
    {
-      if (mfe->fShutdown)
+      if (mfe->fShutdownRequested)
          return;
       
       std::string path;
@@ -247,7 +247,7 @@ public:
          
    void WRAlarm(const std::string &alarm)
    {
-      if (mfe->fShutdown)
+      if (mfe->fShutdownRequested)
          return;
       
       std::string path;
@@ -314,7 +314,7 @@ public:
 
    std::string RE1(const char* name)
    {
-      if (mfe->fShutdown)
+      if (mfe->fShutdownRequested)
          return "";
       std::string cmd;
       cmd += "$BD:00:CMD:MON,PAR:";
@@ -329,7 +329,7 @@ public:
 
    std::string RE(const char* name)
    {
-      if (mfe->fShutdown)
+      if (mfe->fShutdownRequested)
          return "";
       std::string cmd;
       //Exch(s, "$BD:00:CMD:MON,CH:4,PAR:VSET");
@@ -348,7 +348,7 @@ public:
    std::vector<double> VE(const char* name)
    {
       std::vector<double> vd;
-      if (mfe->fShutdown)
+      if (mfe->fShutdownRequested)
          return vd;
       std::string cmd;
       //Exch(s, "$BD:00:CMD:MON,CH:4,PAR:VSET");
@@ -627,8 +627,8 @@ public:
    }
 };
 
-#define CHECK(delay) { if (!s->fConnected) break; mfe->PollMidas(delay); if (mfe->fShutdown) break; }
-#define CHECK1(delay) { if (!s->fConnected) break; mfe->PollMidas(delay); if (mfe->fShutdown) break; }
+#define CHECK(delay) { if (!s->fConnected) break; mfe->PollMidas(delay); if (mfe->fShutdownRequested) break; }
+#define CHECK1(delay) { if (!s->fConnected) break; mfe->PollMidas(delay); if (mfe->fShutdownRequested) break; }
 
 int main(int argc, char* argv[])
 {
@@ -663,8 +663,8 @@ int main(int argc, char* argv[])
    eqc->FrontendName = std::string("fecaen_") + name;
    eqc->LogHistory = 1;
    
-   TMFeEquipment* eq = new TMFeEquipment(C(std::string("CAEN_") + name));
-   eq->Init(mfe->fOdbRoot, eqc);
+   TMFeEquipment* eq = new TMFeEquipment(mfe,C(std::string("CAEN_") + name),eqc);
+   eq->Init();
    eq->SetStatus("Starting...", "white");
 
    mfe->RegisterEquipment(eq);
@@ -679,16 +679,20 @@ int main(int argc, char* argv[])
    hv->s = s;
 
    mfe->RegisterRpcHandler(hv);
-   mfe->SetTransitionSequence(-1, -1, -1, -1);
+   mfe->SetTransitionSequenceStart(-1);
+   mfe->SetTransitionSequenceStop(-1);
+   mfe->SetTransitionSequencePause(-1);
+   mfe->SetTransitionSequenceResume(-1);
 
-   while (!mfe->fShutdown) {
+
+   while (!mfe->fShutdownRequested) {
       bool first_time = true;
 
       if (!s->fConnected) {
          eq->SetStatus("Connecting...", "white");
 
          int delay = 100;
-         while (!mfe->fShutdown) {
+         while (!mfe->fShutdownRequested) {
             KOtcpError e = s->Connect();
             if (!e.error) {
                mfe->Msg(MINFO, "main", "Connected to %s:%s", name, port);
@@ -704,7 +708,7 @@ int main(int argc, char* argv[])
          }
       }
 
-      while (!mfe->fShutdown) {
+      while (!mfe->fShutdownRequested) {
 
          //time_t start_time = time(NULL);
 
@@ -712,7 +716,7 @@ int main(int argc, char* argv[])
          std::string bdname = hv->RE1("BDNAME"); // mainframe name and type
          std::string bdnch  = hv->RE1("BDNCH"); // channels number
 
-         if (mfe->fShutdown) {
+         if (mfe->fShutdownRequested) {
             break;
          }
 
@@ -769,15 +773,15 @@ int main(int argc, char* argv[])
          if (hv->fFastUpdate) {
             //mfe->Msg(MINFO, "main", "fast update!");
             mfe->PollMidas(1000);
-            if (mfe->fShutdown)
+            if (mfe->fShutdownRequested)
                break;
          } else {
             for (int i=0; i<3; i++) {
                mfe->PollMidas(1000);
-               if (mfe->fShutdown)
+               if (mfe->fShutdownRequested)
                   break;
             }
-            if (mfe->fShutdown)
+            if (mfe->fShutdownRequested)
                break;
          }
       }

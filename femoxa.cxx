@@ -146,7 +146,7 @@ public:
 
    void WR(const char* name, const char* v)
    {
-      if (mfe->fShutdown)
+      if (mfe->fShutdownRequested)
          return;
       
       std::string path;
@@ -163,7 +163,7 @@ public:
          
    void WD(const char* name, const double v)
    {
-      if (mfe->fShutdown)
+      if (mfe->fShutdownRequested)
          return;
       
       std::string path;
@@ -179,7 +179,7 @@ public:
          
    void WVD(const char* name, const std::vector<double> &v)
    {
-      if (mfe->fShutdown)
+      if (mfe->fShutdownRequested)
          return;
       
       std::string path;
@@ -196,7 +196,7 @@ public:
 
    double WRead(const char* equipment, const char* name, int idx)
    {
-      if (mfe->fShutdown)
+      if (mfe->fShutdownRequested)
          return -1.;
       
       std::string path;
@@ -351,8 +351,8 @@ int main(int argc, char* argv[])
    eqc->FrontendName = "femoxa01";
    eqc->LogHistory = 1;
    
-   TMFeEquipment* eq = new TMFeEquipment("TpcCooling");
-   eq->Init(mfe->fOdbRoot, eqc);
+   TMFeEquipment* eq = new TMFeEquipment(mfe,"TpcCooling",eqc);
+   eq->Init();
    eq->SetStatus("Starting...", "white");
 
    mfe->RegisterEquipment(eq);
@@ -366,15 +366,18 @@ int main(int argc, char* argv[])
    moxa->s = s;
 
    mfe->RegisterRpcHandler(moxa);
-   mfe->SetTransitionSequence(-1, -1, -1, -1);
+   mfe->SetTransitionSequenceStart(-1);
+   mfe->SetTransitionSequenceStop(-1);
+   mfe->SetTransitionSequencePause(-1);
+   mfe->SetTransitionSequenceResume(-1);
 
-   while (!mfe->fShutdown) {
+   while (!mfe->fShutdownRequested) {
 
       moxa->Read();
          
       for (int i=0; i<10; i++) {
          mfe->PollMidas(1000);
-         if (mfe->fShutdown)
+         if (mfe->fShutdownRequested)
             break;
       }
    }

@@ -25,7 +25,7 @@
 #include "midas.h"
 #include "mjson.h"
 
-static TMVOdb* gEvbC = NULL;
+static MVOdb* gEvbC = NULL;
 
 static std::mutex gOdbLock;
 #define LOCK_ODB() std::lock_guard<std::mutex> lock(gOdbLock)
@@ -197,7 +197,7 @@ std::vector<std::string> JsonToStringArray(const MJsonNode* n)
 
 void WR(TMFE*mfe, TMFeEquipment* eq, const char* mod, const char* mid, const char* vid, const char* v)
 {
-   if (mfe->fShutdown)
+   if (mfe->fShutdownRequested)
       return;
    
    std::string path;
@@ -221,7 +221,7 @@ void WR(TMFE*mfe, TMFeEquipment* eq, const char* mod, const char* mid, const cha
 
 void WRI(TMFE*mfe, TMFeEquipment* eq, const char* mod, const char* mid, const char* vid, const std::vector<int>& v)
 {
-   if (mfe->fShutdown)
+   if (mfe->fShutdownRequested)
       return;
    
    std::string path;
@@ -245,7 +245,7 @@ void WRI(TMFE*mfe, TMFeEquipment* eq, const char* mod, const char* mid, const ch
 
 void WRD(TMFE*mfe, TMFeEquipment* eq, const char* mod, const char* mid, const char* vid, const std::vector<double>& v)
 {
-   if (mfe->fShutdown)
+   if (mfe->fShutdownRequested)
       return;
    
    std::string path;
@@ -269,7 +269,7 @@ void WRD(TMFE*mfe, TMFeEquipment* eq, const char* mod, const char* mid, const ch
 
 void WRB(TMFE*mfe, TMFeEquipment* eq, const char* mod, const char* mid, const char* vid, const std::vector<bool>& v)
 {
-   if (mfe->fShutdown)
+   if (mfe->fShutdownRequested)
       return;
    
    std::string path;
@@ -889,8 +889,8 @@ public:
 
       int run_state = 0;
       int transition_in_progress = 0;
-      fMfe->fOdbRoot->RI("Runinfo/State", 0, &run_state, false);
-      fMfe->fOdbRoot->RI("Runinfo/Transition in progress", 0, &transition_in_progress, false);
+      fMfe->fOdbRoot->RI("Runinfo/State", &run_state, false);
+      fMfe->fOdbRoot->RI("Runinfo/Transition in progress", &transition_in_progress, false);
 
       bool running = (run_state == 3);
 
@@ -1352,7 +1352,7 @@ public:
 
       bool boot_from_user_page = false;
 
-      fEq->fOdbEqSettings->RB("ADC/boot_user_page", fOdbIndex, &boot_from_user_page, false);
+      fEq->fOdbEqSettings->RBAI("ADC/boot_user_page", fOdbIndex, &boot_from_user_page);
 
 #if 0
       fMfe->Msg(MERROR, "Identify", "%s: rebooting to user page: boot_from_user_page: %d, fUserPage %d, fRebootingToUserPage %d", fOdbName.c_str(),
@@ -1438,24 +1438,24 @@ public:
       int ramp_top_len = 0;
       
       bool fw_pulser_enable = false;
-      fEq->fOdbEqSettings->RB("FwPulserEnable", 0, &fw_pulser_enable, true);
+      fEq->fOdbEqSettings->RB("FwPulserEnable", &fw_pulser_enable, true);
       
-      fEq->fOdbEqSettings->RB("ADC/DAC/dac_enable", fOdbIndex, &dac_enable, false);
-      fEq->fOdbEqSettings->RB("ADC/DAC/fw_pulser", fOdbIndex, &fw_pulser, false);
+      fEq->fOdbEqSettings->RBAI("ADC/DAC/dac_enable", fOdbIndex, &dac_enable);
+      fEq->fOdbEqSettings->RBAI("ADC/DAC/fw_pulser", fOdbIndex, &fw_pulser);
       
-      fEq->fOdbEqSettings->RI("ADC/DAC/dac_baseline", fOdbIndex, &dac_baseline, false);
-      fEq->fOdbEqSettings->RI("ADC/DAC/dac_amplitude", fOdbIndex, &dac_amplitude, false);
+      fEq->fOdbEqSettings->RIAI("ADC/DAC/dac_baseline", fOdbIndex, &dac_baseline);
+      fEq->fOdbEqSettings->RIAI("ADC/DAC/dac_amplitude", fOdbIndex, &dac_amplitude);
       
-      fEq->fOdbEqSettings->RI("ADC/DAC/dac_seliq", fOdbIndex, &dac_seliq, false);
-      fEq->fOdbEqSettings->RI("ADC/DAC/dac_xor", fOdbIndex, &dac_xor, false);
-      fEq->fOdbEqSettings->RI("ADC/DAC/dac_torb", fOdbIndex, &dac_torb, false);
+      fEq->fOdbEqSettings->RIAI("ADC/DAC/dac_seliq", fOdbIndex, &dac_seliq);
+      fEq->fOdbEqSettings->RIAI("ADC/DAC/dac_xor", fOdbIndex, &dac_xor);
+      fEq->fOdbEqSettings->RIAI("ADC/DAC/dac_torb", fOdbIndex, &dac_torb);
       
-      fEq->fOdbEqSettings->RB("ADC/DAC/pulser_enable", fOdbIndex, &pulser_enable, false);
-      fEq->fOdbEqSettings->RB("ADC/DAC/ramp_enable", fOdbIndex, &ramp_enable, false);
+      fEq->fOdbEqSettings->RBAI("ADC/DAC/pulser_enable", fOdbIndex, &pulser_enable);
+      fEq->fOdbEqSettings->RBAI("ADC/DAC/ramp_enable", fOdbIndex, &ramp_enable);
       
-      fEq->fOdbEqSettings->RI("ADC/DAC/ramp_up_rate", fOdbIndex, &ramp_up_rate, false);
-      fEq->fOdbEqSettings->RI("ADC/DAC/ramp_down_rate", fOdbIndex, &ramp_down_rate, false);
-      fEq->fOdbEqSettings->RI("ADC/DAC/ramp_top_len", fOdbIndex, &ramp_top_len, false);
+      fEq->fOdbEqSettings->RIAI("ADC/DAC/ramp_up_rate", fOdbIndex, &ramp_up_rate);
+      fEq->fOdbEqSettings->RIAI("ADC/DAC/ramp_down_rate", fOdbIndex, &ramp_down_rate);
+      fEq->fOdbEqSettings->RIAI("ADC/DAC/ramp_top_len", fOdbIndex, &ramp_top_len);
       
       if (fw_pulser && !fw_pulser_enable) {
          dac_enable = false;
@@ -1518,30 +1518,30 @@ public:
          return false;
       }
 
-      fEq->fOdbEqSettings->RI("PeriodAdc", 0, &fConfPollSleep, true);
+      fEq->fOdbEqSettings->RI("PeriodAdc", &fConfPollSleep, true);
       //fEq->fOdbEqSettings->RI("PollAdc", 0, &fConfFailedSleep, true);
 
       int udp_port = 0;
 
-      fMfe->fOdbRoot->RI("Equipment/XUDP/Settings/udp_port_adc", 0, &udp_port, false);
+      fMfe->fOdbRoot->RI("Equipment/XUDP/Settings/udp_port_adc", &udp_port, false);
 
       int adc16_samples = 700;
       int adc16_trig_delay = 0;
       int adc16_trig_start = 200;
 
-      fEq->fOdbEqSettings->RI("ADC/adc16_samples",    0, &adc16_samples, true);
-      fEq->fOdbEqSettings->RI("ADC/adc16_trig_delay", 0, &adc16_trig_delay, true);
-      fEq->fOdbEqSettings->RI("ADC/adc16_trig_start", 0, &adc16_trig_start, true);
-      fEq->fOdbEqSettings->RB("ADC/adc16_enable",     fOdbIndex, &fConfAdc16Enable, false);
+      fEq->fOdbEqSettings->RI("ADC/adc16_samples",    &adc16_samples, true);
+      fEq->fOdbEqSettings->RI("ADC/adc16_trig_delay", &adc16_trig_delay, true);
+      fEq->fOdbEqSettings->RI("ADC/adc16_trig_start", &adc16_trig_start, true);
+      fEq->fOdbEqSettings->RBAI("ADC/adc16_enable",     fOdbIndex, &fConfAdc16Enable);
 
       int adc32_samples = 511;
       int adc32_trig_delay = 0;
       int adc32_trig_start = 175;
 
-      fEq->fOdbEqSettings->RI("ADC/adc32_samples",    0, &adc32_samples, true);
-      fEq->fOdbEqSettings->RI("ADC/adc32_trig_delay", 0, &adc32_trig_delay, true);
-      fEq->fOdbEqSettings->RI("ADC/adc32_trig_start", 0, &adc32_trig_start, true);
-      fEq->fOdbEqSettings->RB("ADC/adc32_enable",     fOdbIndex, &fConfAdc32Enable, false);
+      fEq->fOdbEqSettings->RI("ADC/adc32_samples",    &adc32_samples, true);
+      fEq->fOdbEqSettings->RI("ADC/adc32_trig_delay", &adc32_trig_delay, true);
+      fEq->fOdbEqSettings->RI("ADC/adc32_trig_start", &adc32_trig_start, true);
+      fEq->fOdbEqSettings->RBAI("ADC/adc32_enable",     fOdbIndex, &fConfAdc32Enable);
       
       //int thr = 1;
       //fEq->fOdbEqSettings->RI("ADC/trig_threshold", 0, &thr, true);
@@ -1551,10 +1551,10 @@ public:
       //module_id |= ((thr<<4)&0xF0);
 
       int adc16_threshold = 0x2000;
-      fEq->fOdbEqSettings->RI("ADC/adc16_threshold", 0, &adc16_threshold, true);
+      fEq->fOdbEqSettings->RI("ADC/adc16_threshold", &adc16_threshold, true);
 
       int adc32_threshold = 0x2000;
-      fEq->fOdbEqSettings->RI("ADC/adc32_threshold", 0, &adc32_threshold, true);
+      fEq->fOdbEqSettings->RI("ADC/adc32_threshold", &adc32_threshold, true);
 
       fMfe->Msg(MINFO, "ADC::Configure", "%s: configure: udp_port %d, adc16 enable %d, samples %d, trig_delay %d, trig_start %d, thr %d, adc32 enable %d, samples %d, trig_delay %d, trig_start %d, thr %d, module_id 0x%02x", fOdbName.c_str(), udp_port, fConfAdc16Enable, adc16_samples, adc16_trig_delay, adc16_trig_start, adc16_threshold, fConfAdc32Enable, adc32_samples, adc32_trig_delay, adc32_trig_start, adc32_threshold, module_id);
 
@@ -1794,7 +1794,7 @@ public:
    {
       printf("thread for %s started\n", fOdbName.c_str());
       assert(fEsper);
-      while (!fMfe->fShutdown) {
+      while (!fMfe->fShutdownRequested) {
          if (fEsper->fFailed) {
             bool ok;
             {
@@ -1805,7 +1805,7 @@ public:
             if (!ok) {
                fState = ST_BAD_IDENTIFY;
                for (int i=0; i<fConfFailedSleep; i++) {
-                  if (fMfe->fShutdown)
+                  if (fMfe->fShutdownRequested)
                      break;
                   sleep(1);
                }
@@ -1819,7 +1819,7 @@ public:
          }
 
          for (int i=0; i<fConfPollSleep; i++) {
-            if (fMfe->fShutdown)
+            if (fMfe->fShutdownRequested)
                break;
             sleep(1);
          }
@@ -2205,8 +2205,8 @@ public:
 
       int run_state = 0;
       int transition_in_progress = 0;
-      fMfe->fOdbRoot->RI("Runinfo/State", 0, &run_state, false);
-      fMfe->fOdbRoot->RI("Runinfo/Transition in progress", 0, &transition_in_progress, false);
+      fMfe->fOdbRoot->RI("Runinfo/State", &run_state, false);
+      fMfe->fOdbRoot->RI("Runinfo/Transition in progress", &transition_in_progress, false);
 
       bool running = (run_state == 3);
 
@@ -2659,10 +2659,10 @@ public:
       }
 
       bool enable_boot_from_user_page = false;
-      fEq->fOdbEqSettings->RB("PWB/enable_boot_user_page", 0, &enable_boot_from_user_page, true);
+      fEq->fOdbEqSettings->RB("PWB/enable_boot_user_page", &enable_boot_from_user_page, true);
 
       bool boot_from_user_page = false;
-      fEq->fOdbEqSettings->RB("PWB/boot_user_page", fOdbIndex, &boot_from_user_page, false);
+      fEq->fOdbEqSettings->RBAI("PWB/boot_user_page", fOdbIndex, &boot_from_user_page);
 
       if (boot_from_user_page != fUserPage) {
          if (enable_boot_from_user_page && boot_from_user_page) {
@@ -2718,7 +2718,7 @@ public:
 
       DWORD t0 = ss_millitime();
 
-      fEq->fOdbEqSettings->RI("PeriodPwb", 0, &fConfPollSleep, true);
+      fEq->fOdbEqSettings->RI("PeriodPwb", &fConfPollSleep, true);
 
       bool ok = true;
 
@@ -2775,32 +2775,32 @@ public:
       double threshold_fpn = 0;
       double threshold_pads = 0;
 
-      fEq->fOdbEqSettings->RI("PWB/clkin_sel", 0, &clkin_sel, true);
-      fEq->fOdbEqSettings->RI("PWB/trig_delay", 0, &trig_delay, true);
-      fEq->fOdbEqSettings->RI("PWB/sata_trig_delay", 0, &sata_trig_delay, true);
-      fEq->fOdbEqSettings->RI("PWB/sca_gain", 0, &sca_gain, true);
-      fEq->fOdbEqSettings->RI("PWB/sca_samples", 0, &sca_samples, true);
+      fEq->fOdbEqSettings->RI("PWB/clkin_sel", &clkin_sel, true);
+      fEq->fOdbEqSettings->RI("PWB/trig_delay", &trig_delay, true);
+      fEq->fOdbEqSettings->RI("PWB/sata_trig_delay", &sata_trig_delay, true);
+      fEq->fOdbEqSettings->RI("PWB/sca_gain", &sca_gain, true);
+      fEq->fOdbEqSettings->RI("PWB/sca_samples", &sca_samples, true);
 
-      fEq->fOdbEqSettings->RB("PWB/ch_enable", 0, &ch_enable, true);
-      fEq->fOdbEqSettings->RI("PWB/ch_threshold", 0, &ch_threshold, true);
-      fEq->fOdbEqSettings->RB("PWB/ch_force", 0, &ch_force, true);
+      fEq->fOdbEqSettings->RB("PWB/ch_enable", &ch_enable, true);
+      fEq->fOdbEqSettings->RI("PWB/ch_threshold", &ch_threshold, true);
+      fEq->fOdbEqSettings->RB("PWB/ch_force", &ch_force, true);
 
-      fEq->fOdbEqSettings->RB("PWB/disable_reset1", 0, &disable_reset1, true);
+      fEq->fOdbEqSettings->RB("PWB/disable_reset1", &disable_reset1, true);
 
-      fEq->fOdbEqSettings->RB("PWB/suppress_reset", 0, &suppress_reset, true);
-      fEq->fOdbEqSettings->RB("PWB/suppress_fpn", 0, &suppress_fpn, true);
-      fEq->fOdbEqSettings->RB("PWB/suppress_pads", 0, &suppress_pads, true);
+      fEq->fOdbEqSettings->RB("PWB/suppress_reset", &suppress_reset, true);
+      fEq->fOdbEqSettings->RB("PWB/suppress_fpn", &suppress_fpn, true);
+      fEq->fOdbEqSettings->RB("PWB/suppress_pads", &suppress_pads, true);
 
-      fEq->fOdbEqSettings->RD("PWB/baseline_reset", fOdbIndex, &baseline_reset, false);
-      fEq->fOdbEqSettings->RD("PWB/baseline_fpn", fOdbIndex, &baseline_fpn, false);
-      fEq->fOdbEqSettings->RD("PWB/baseline_pads", fOdbIndex, &baseline_pads, false);
+      fEq->fOdbEqSettings->RDAI("PWB/baseline_reset", fOdbIndex, &baseline_reset);
+      fEq->fOdbEqSettings->RDAI("PWB/baseline_fpn", fOdbIndex, &baseline_fpn);
+      fEq->fOdbEqSettings->RDAI("PWB/baseline_pads", fOdbIndex, &baseline_pads);
 
-      fEq->fOdbEqSettings->RD("PWB/threshold_reset", 0, &threshold_reset, true);
-      fEq->fOdbEqSettings->RD("PWB/threshold_fpn", 0, &threshold_fpn, true);
-      fEq->fOdbEqSettings->RD("PWB/threshold_pads", 0, &threshold_pads, true);
+      fEq->fOdbEqSettings->RD("PWB/threshold_reset", &threshold_reset, true);
+      fEq->fOdbEqSettings->RD("PWB/threshold_fpn", &threshold_fpn, true);
+      fEq->fOdbEqSettings->RD("PWB/threshold_pads", &threshold_pads, true);
 
-      fEq->fOdbEqSettings->RI("PWB/start_delay", 0, &start_delay, true);
-      fEq->fOdbEqSettings->RI("PWB/sca_ddelay", 0, &sca_ddelay, true);
+      fEq->fOdbEqSettings->RI("PWB/start_delay", &start_delay, true);
+      fEq->fOdbEqSettings->RI("PWB/sca_ddelay", &sca_ddelay, true);
 
       int udp_port = 0;
 
@@ -2809,33 +2809,33 @@ public:
       static int x=0;
       x++;
       if ((x%4) == 0)
-         fMfe->fOdbRoot->RI("Equipment/XUDP/Settings/udp_port_pwb_a", 0, &udp_port, false);
+         fMfe->fOdbRoot->RI("Equipment/XUDP/Settings/udp_port_pwb_a", &udp_port, false);
       else if ((x%4) == 1)
-         fMfe->fOdbRoot->RI("Equipment/XUDP/Settings/udp_port_pwb_b", 0, &udp_port, false);
+         fMfe->fOdbRoot->RI("Equipment/XUDP/Settings/udp_port_pwb_b", &udp_port, false);
       else if ((x%4) == 2)
-         fMfe->fOdbRoot->RI("Equipment/XUDP/Settings/udp_port_pwb_c", 0, &udp_port, false);
+         fMfe->fOdbRoot->RI("Equipment/XUDP/Settings/udp_port_pwb_c", &udp_port, false);
       else if ((x%4) == 3)
-         fMfe->fOdbRoot->RI("Equipment/XUDP/Settings/udp_port_pwb_d", 0, &udp_port, false);
+         fMfe->fOdbRoot->RI("Equipment/XUDP/Settings/udp_port_pwb_d", &udp_port, false);
       else
-         fMfe->fOdbRoot->RI("Equipment/XUDP/Settings/udp_port_pwb", 0, &udp_port, false);
+         fMfe->fOdbRoot->RI("Equipment/XUDP/Settings/udp_port_pwb", &udp_port, false);
 
       bool enable_trigger = false;
-      fEq->fOdbEqSettings->RB("PWB/enable_trigger", 0, &enable_trigger, true);
+      fEq->fOdbEqSettings->RB("PWB/enable_trigger", &enable_trigger, true);
 
       bool enable_trigger_group_a = true;
-      fEq->fOdbEqSettings->RB("PWB/enable_trigger_group_a", 0, &enable_trigger_group_a, true);
+      fEq->fOdbEqSettings->RB("PWB/enable_trigger_group_a", &enable_trigger_group_a, true);
 
       bool enable_trigger_group_b = true;
-      fEq->fOdbEqSettings->RB("PWB/enable_trigger_group_b", 0, &enable_trigger_group_b, true);
+      fEq->fOdbEqSettings->RB("PWB/enable_trigger_group_b", &enable_trigger_group_b, true);
 
       int pwb_column = fOdbIndex/8;
       bool enable_trigger_column = false;
-      fEq->fOdbEqSettings->RB("PWB/enable_trigger_column", pwb_column, &enable_trigger_column, false);
+      fEq->fOdbEqSettings->RBAI("PWB/enable_trigger_column", pwb_column, &enable_trigger_column);
 
       bool trigger = false;
-      fEq->fOdbEqSettings->RB("PWB/trigger", fOdbIndex, &trigger, false);
+      fEq->fOdbEqSettings->RBAI("PWB/trigger", fOdbIndex, &trigger);
 
-      fEq->fOdbEqSettings->RB("PWB/sata_trigger", fOdbIndex, &fUseSataTrigger, false);
+      fEq->fOdbEqSettings->RBAI("PWB/sata_trigger", fOdbIndex, &fUseSataTrigger);
 
       bool group_a = false;
       bool group_b = false;
@@ -3025,9 +3025,9 @@ public:
 
       // configure MV2
       int mv2enabled, mv2range, mv2res;
-      fEq->fOdbEqSettings->RI("PWB/mv2_enabled", fOdbIndex, &mv2enabled, true);
-      fEq->fOdbEqSettings->RI("PWB/mv2_range", fOdbIndex, &mv2range, true);
-      fEq->fOdbEqSettings->RI("PWB/mv2_resolution", fOdbIndex, &mv2res, true);
+      fEq->fOdbEqSettings->RIAI("PWB/mv2_enabled", fOdbIndex, &mv2enabled);
+      fEq->fOdbEqSettings->RIAI("PWB/mv2_range", fOdbIndex, &mv2range);
+      fEq->fOdbEqSettings->RIAI("PWB/mv2_resolution", fOdbIndex, &mv2res);
       
       if( mv2enabled )
          {
@@ -3107,7 +3107,7 @@ public:
    {
       printf("thread for %s started\n", fOdbName.c_str());
       assert(fEsper);
-      while (!fMfe->fShutdown) {
+      while (!fMfe->fShutdownRequested) {
          if (fEsper->fFailed) {
             bool ok;
             {
@@ -3118,7 +3118,7 @@ public:
             if (!ok) {
                fState = ST_BAD_IDENTIFY;
                for (int i=0; i<fConfFailedSleep; i++) {
-                  if (fMfe->fShutdown)
+                  if (fMfe->fShutdownRequested)
                      break;
                   sleep(1);
                }
@@ -3132,7 +3132,7 @@ public:
          }
 
          for (int i=0; i<fConfPollSleep; i++) {
-            if (fMfe->fShutdown)
+            if (fMfe->fShutdownRequested)
                break;
             sleep(1);
          }
@@ -3849,7 +3849,7 @@ public:
    TMFeEquipment* fEq = NULL;
    std::string fOdbName;
    GrifComm* fComm = NULL;
-   TMVOdb* fStatus = NULL;
+   MVOdb* fStatus = NULL;
 
 public:
 
@@ -4052,15 +4052,15 @@ public:
       }
 
       int mlu_selected_file = 0;
-      fEq->fOdbEqSettings->RI("TRG/MluSelectedFile", 0, &mlu_selected_file, true);
+      fEq->fOdbEqSettings->RI("TRG/MluSelectedFile", &mlu_selected_file, true);
 
       std::string mlu_dir = "/home/agdaq/online/src";
 
-      fEq->fOdbEqSettings->RS("TRG/MluDir", 0, &mlu_dir, true);
+      fEq->fOdbEqSettings->RS("TRG/MluDir", &mlu_dir, true);
 
       std::string mlu_file = "mlu.txt";
 
-      fEq->fOdbEqSettings->RS("TRG/MluFiles", mlu_selected_file, &mlu_file, false);
+      fEq->fOdbEqSettings->RSAI("TRG/MluFiles", mlu_selected_file, &mlu_file);
 
       mlu_file = mlu_dir + "/" + mlu_file;
 
@@ -4130,113 +4130,113 @@ public:
          return false;
       }
 
-      fEq->fOdbEqSettings->RI("TRG/ClockSelect", 0, &fConfClockSelect, true);
+      fEq->fOdbEqSettings->RI("TRG/ClockSelect", &fConfClockSelect, true);
 
 
-      fEq->fOdbEqSettings->RI("PeriodScalers", 0, &fConfPeriodScalers, true);
+      fEq->fOdbEqSettings->RI("PeriodScalers", &fConfPeriodScalers, true);
 
-      //fEq->fOdbEqSettings->RB("CosmicEnable",   0, &fConfCosmicEnable, true);
-      fEq->fOdbEqSettings->RB("SwPulserEnable", 0, &fConfSwPulserEnable, true);
-      fEq->fOdbEqSettings->RD("SwPulserFreq",   0, &fConfSwPulserFreq, true);
+      //fEq->fOdbEqSettings->RB("CosmicEnable",   &fConfCosmicEnable, true);
+      fEq->fOdbEqSettings->RB("SwPulserEnable", &fConfSwPulserEnable, true);
+      fEq->fOdbEqSettings->RD("SwPulserFreq",   &fConfSwPulserFreq, true);
 
       // settings for the synchronization sequence
 
-      fEq->fOdbEqSettings->RI("SyncCount",      0, &fConfSyncCount, true);
+      fEq->fOdbEqSettings->RI("SyncCount",      &fConfSyncCount, true);
       if (enablePwbTrigger)
-         fEq->fOdbEqSettings->RD("PwbSyncPeriodSec",  0, &fConfSyncPeriodSec, true);
+         fEq->fOdbEqSettings->RD("PwbSyncPeriodSec",  &fConfSyncPeriodSec, true);
       else
-         fEq->fOdbEqSettings->RD("SyncPeriodSec",  0, &fConfSyncPeriodSec, true);
+         fEq->fOdbEqSettings->RD("SyncPeriodSec",  &fConfSyncPeriodSec, true);
 
-      fEq->fOdbEqSettings->RD("SyncPeriodIncrSec",  0, &fConfSyncPeriodIncrSec, true);
+      fEq->fOdbEqSettings->RD("SyncPeriodIncrSec",  &fConfSyncPeriodIncrSec, true);
       
       // settings for the TRG pulser
 
-      fEq->fOdbEqSettings->RD("Pulser/ClockFreqHz",     0, &fConfPulserClockFreq, true);
-      fEq->fOdbEqSettings->RI("Pulser/PulseWidthClk",   0, &fConfPulserWidthClk, true);
-      fEq->fOdbEqSettings->RI("Pulser/PulsePeriodClk",  0, &fConfPulserPeriodClk, true);
-      fEq->fOdbEqSettings->RD("Pulser/PulseFreqHz",     0, &fConfPulserFreq, true);
-      fEq->fOdbEqSettings->RB("Pulser/Enable",          0, &fConfRunPulser, true);
-      fEq->fOdbEqSettings->RB("Pulser/OutputEnable",    0, &fConfOutputPulser, true);
+      fEq->fOdbEqSettings->RD("Pulser/ClockFreqHz",     &fConfPulserClockFreq, true);
+      fEq->fOdbEqSettings->RI("Pulser/PulseWidthClk",   &fConfPulserWidthClk, true);
+      fEq->fOdbEqSettings->RI("Pulser/PulsePeriodClk",  &fConfPulserPeriodClk, true);
+      fEq->fOdbEqSettings->RD("Pulser/PulseFreqHz",     &fConfPulserFreq, true);
+      fEq->fOdbEqSettings->RB("Pulser/Enable",          &fConfRunPulser, true);
+      fEq->fOdbEqSettings->RB("Pulser/OutputEnable",    &fConfOutputPulser, true);
 
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigPulser",  0, &fConfTrigPulser, true);
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigEsataNimGrandOr",  0, &fConfTrigEsataNimGrandOr, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigPulser",  &fConfTrigPulser, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigEsataNimGrandOr",  &fConfTrigEsataNimGrandOr, true);
 
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigAdc16GrandOr",  0, &fConfTrigAdc16GrandOr, true);
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigAdc32GrandOr",  0, &fConfTrigAdc32GrandOr, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigAdc16GrandOr",  &fConfTrigAdc16GrandOr, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigAdc32GrandOr",  &fConfTrigAdc32GrandOr, true);
 
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigAdcGrandOr",  0, &fConfTrigAdcGrandOr, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigAdcGrandOr",  &fConfTrigAdcGrandOr, true);
 
-      fEq->fOdbEqSettings->RB("TrigSrc/Trig1ormore",  0, &fConfTrig1ormore, true);
-      fEq->fOdbEqSettings->RB("TrigSrc/Trig2ormore",  0, &fConfTrig2ormore, true);
-      fEq->fOdbEqSettings->RB("TrigSrc/Trig3ormore",  0, &fConfTrig3ormore, true);
-      fEq->fOdbEqSettings->RB("TrigSrc/Trig4ormore",  0, &fConfTrig4ormore, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/Trig1ormore",  &fConfTrig1ormore, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/Trig2ormore",  &fConfTrig2ormore, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/Trig3ormore",  &fConfTrig3ormore, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/Trig4ormore",  &fConfTrig4ormore, true);
 
-      //fEq->fOdbEqSettings->RB("TrigSrc/TrigAdc16Coinc",  0, &fConfTrigAdc16Coinc, true);
+      //fEq->fOdbEqSettings->RB("TrigSrc/TrigAdc16Coinc",  &fConfTrigAdc16Coinc, true);
 
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigAwCoincA",  0, &fConfTrigAwCoincA, true);
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigAwCoincB",  0, &fConfTrigAwCoincB, true);
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigAwCoincC",  0, &fConfTrigAwCoincC, true);
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigAwCoincD",  0, &fConfTrigAwCoincD, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigAwCoincA",  &fConfTrigAwCoincA, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigAwCoincB",  &fConfTrigAwCoincB, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigAwCoincC",  &fConfTrigAwCoincC, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigAwCoincD",  &fConfTrigAwCoincD, true);
 
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigAwCoinc",  0, &fConfTrigAwCoinc, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigAwCoinc",  &fConfTrigAwCoinc, true);
 
-      fEq->fOdbEqSettings->RU32("TRG/AwCoincA",  0, &fConfAwCoincA, true);
-      fEq->fOdbEqSettings->RU32("TRG/AwCoincB",  0, &fConfAwCoincB, true);
-      fEq->fOdbEqSettings->RU32("TRG/AwCoincC",  0, &fConfAwCoincC, true);
-      fEq->fOdbEqSettings->RU32("TRG/AwCoincD",  0, &fConfAwCoincD, true);
+      fEq->fOdbEqSettings->RU32("TRG/AwCoincA",  &fConfAwCoincA, true);
+      fEq->fOdbEqSettings->RU32("TRG/AwCoincB",  &fConfAwCoincB, true);
+      fEq->fOdbEqSettings->RU32("TRG/AwCoincC",  &fConfAwCoincC, true);
+      fEq->fOdbEqSettings->RU32("TRG/AwCoincD",  &fConfAwCoincD, true);
 
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigAw1ormore",  0, &fConfTrigAw1ormore, true);
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigAw2ormore",  0, &fConfTrigAw2ormore, true);
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigAw3ormore",  0, &fConfTrigAw3ormore, true);
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigAw4ormore",  0, &fConfTrigAw4ormore, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigAw1ormore",  &fConfTrigAw1ormore, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigAw2ormore",  &fConfTrigAw2ormore, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigAw3ormore",  &fConfTrigAw3ormore, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigAw4ormore",  &fConfTrigAw4ormore, true);
 
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigAwMLU",  0, &fConfTrigAwMLU, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigAwMLU",  &fConfTrigAwMLU, true);
 
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigBscGrandOr",  0, &fConfTrigBscGrandOr, true);
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigBscMult",  0, &fConfTrigBscMult, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigBscGrandOr",  &fConfTrigBscGrandOr, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigBscMult",  &fConfTrigBscMult, true);
 
-      fEq->fOdbEqSettings->RB("TrigSrc/TrigCoinc",  0, &fConfTrigCoinc, true);
+      fEq->fOdbEqSettings->RB("TrigSrc/TrigCoinc",  &fConfTrigCoinc, true);
 
-      fEq->fOdbEqSettings->RU32("TRG/NimMask",  0, &fConfNimMask, true);
-      fEq->fOdbEqSettings->RU32("TRG/EsataMask",  0, &fConfEsataMask, true);
+      fEq->fOdbEqSettings->RU32("TRG/NimMask",  &fConfNimMask, true);
+      fEq->fOdbEqSettings->RU32("TRG/EsataMask",  &fConfEsataMask, true);
 
-      fEq->fOdbEqSettings->RB("TRG/PassThrough",  0, &fConfPassThrough, true);
+      fEq->fOdbEqSettings->RB("TRG/PassThrough",  &fConfPassThrough, true);
 
       bool aw16_from_adc16 = false;
       bool aw16_from_adc32a = false;
       bool aw16_from_adc32b = false;
 
-      fEq->fOdbEqSettings->RB("TRG/Aw16FromAdc16",  0, &aw16_from_adc16, true);
-      fEq->fOdbEqSettings->RB("TRG/Aw16FromAdc32a",  0, &aw16_from_adc32a, true);
-      fEq->fOdbEqSettings->RB("TRG/Aw16FromAdc32b",  0, &aw16_from_adc32b, true);
+      fEq->fOdbEqSettings->RB("TRG/Aw16FromAdc16",  &aw16_from_adc16, true);
+      fEq->fOdbEqSettings->RB("TRG/Aw16FromAdc32a",  &aw16_from_adc32a, true);
+      fEq->fOdbEqSettings->RB("TRG/Aw16FromAdc32b",  &aw16_from_adc32b, true);
 
       bool bsc_from_adc16_a = false;
       bool bsc_from_adc16_b = false;
 
-      fEq->fOdbEqSettings->RB("TRG/BscFromAdc16a",  0, &bsc_from_adc16_a, true);
-      fEq->fOdbEqSettings->RB("TRG/BscFromAdc16b",  0, &bsc_from_adc16_b, true);
+      fEq->fOdbEqSettings->RB("TRG/BscFromAdc16a",  &bsc_from_adc16_a, true);
+      fEq->fOdbEqSettings->RB("TRG/BscFromAdc16b",  &bsc_from_adc16_b, true);
 
       bool bsc_bot_only = false;
       bool bsc_top_only = false;
       bool bsc_bot_top_or = true;
       bool bsc_bot_top_and = false;
 
-      fEq->fOdbEqSettings->RB("TRG/BscBotOnly",   0, &bsc_bot_only, true);
-      fEq->fOdbEqSettings->RB("TRG/BscTopOnly",   0, &bsc_top_only, true);
-      fEq->fOdbEqSettings->RB("TRG/BscBotTopOr",  0, &bsc_bot_top_or, true);
-      fEq->fOdbEqSettings->RB("TRG/BscBotTopAnd", 0, &bsc_bot_top_and, true);
+      fEq->fOdbEqSettings->RB("TRG/BscBotOnly",   &bsc_bot_only, true);
+      fEq->fOdbEqSettings->RB("TRG/BscTopOnly",   &bsc_top_only, true);
+      fEq->fOdbEqSettings->RB("TRG/BscBotTopOr",  &bsc_bot_top_or, true);
+      fEq->fOdbEqSettings->RB("TRG/BscBotTopAnd", &bsc_bot_top_and, true);
 
       int bsc_multiplicity = 1;
 
-      fEq->fOdbEqSettings->RI("TRG/BscMultiplicity",  0, &bsc_multiplicity, true);
+      fEq->fOdbEqSettings->RI("TRG/BscMultiplicity",  &bsc_multiplicity, true);
 
       uint32_t coinc_start = 0;
       uint32_t coinc_require = 0;
       int coinc_window = 16;
 
-      fEq->fOdbEqSettings->RU32("TRG/CoincStart",  0, &coinc_start, true);
-      fEq->fOdbEqSettings->RU32("TRG/CoincRequire",  0, &coinc_require, true);
-      fEq->fOdbEqSettings->RI("TRG/CoincWindow",  0, &coinc_window, true);
+      fEq->fOdbEqSettings->RU32("TRG/CoincStart",  &coinc_start, true);
+      fEq->fOdbEqSettings->RU32("TRG/CoincRequire",  &coinc_require, true);
+      fEq->fOdbEqSettings->RI("TRG/CoincWindow",  &coinc_window, true);
 
       bool ok = true;
 
@@ -4245,7 +4245,7 @@ public:
       ok &= WriteTrigEnable(0); // disable all triggers
 
       int trg_udp_packet_size = 44;
-      fEq->fOdbEqSettings->RI("TRG/UdpPacketSize", 0, &trg_udp_packet_size, true);
+      fEq->fOdbEqSettings->RI("TRG/UdpPacketSize", &trg_udp_packet_size, true);
 
       ok &= fComm->write_param(0x08, 0xFFFF, trg_udp_packet_size-2*4); // AT packet size in bytes minus the last 0xExxxxxxx word
 
@@ -4269,10 +4269,10 @@ public:
          conf_control |= (1<<3);
       
       int conf_mlu_prompt = 64;
-      fEq->fOdbEqSettings->RI("TRG/MluPrompt", 0, &conf_mlu_prompt, true);
+      fEq->fOdbEqSettings->RI("TRG/MluPrompt", &conf_mlu_prompt, true);
 
       int conf_mlu_wait = 128;
-      fEq->fOdbEqSettings->RI("TRG/MluWait", 0, &conf_mlu_wait, true);
+      fEq->fOdbEqSettings->RI("TRG/MluWait", &conf_mlu_wait, true);
 
       conf_control |= (conf_mlu_prompt&0xFF)<<16;
       conf_control |= (conf_mlu_wait&0xFF)<<24;
@@ -4282,7 +4282,7 @@ public:
       fMfe->Msg(MINFO, "Configure", "%s: conf_control: 0x%08x", fOdbName.c_str(), conf_control);
 
       int conf_counter_adc_select = 0;
-      fEq->fOdbEqSettings->RI("TRG/ConfCounterAdcSelect",  0, &conf_counter_adc_select, true);
+      fEq->fOdbEqSettings->RI("TRG/ConfCounterAdcSelect",  &conf_counter_adc_select, true);
       ok &= SelectAdcLocked(conf_counter_adc_select);
 
       // configure Barrel Scintillator trigger
@@ -4330,17 +4330,17 @@ public:
       // configure the 62.5 MHz clock section
 
       int drift_width = 10;
-      fEq->fOdbEqSettings->RI("TRG/DriftWidthClk", 0, &drift_width, true);
+      fEq->fOdbEqSettings->RI("TRG/DriftWidthClk", &drift_width, true);
       ok &= fComm->write_param(0x35, 0xFFFF, drift_width);
 
-      fEq->fOdbEqSettings->RI("TRG/Scaledown", 0, &fConfScaledown, true);
+      fEq->fOdbEqSettings->RI("TRG/Scaledown", &fConfScaledown, true);
       ok &= fComm->write_param(0x36, 0xFFFF, 0); // disable scaledown while we run the sync sequence
 
       int trig_delay = 0;
-      fEq->fOdbEqSettings->RI("TRG/TrigDelayClk",  0, &trig_delay, true);
+      fEq->fOdbEqSettings->RI("TRG/TrigDelayClk",  &trig_delay, true);
 
       int mlu_trig_delay = 0;
-      fEq->fOdbEqSettings->RI("TRG/MluTrigDelayClk",  0, &mlu_trig_delay, true);
+      fEq->fOdbEqSettings->RI("TRG/MluTrigDelayClk",  &mlu_trig_delay, true);
 
       if (fConfTrigAwMLU)
          trig_delay = mlu_trig_delay;
@@ -4348,20 +4348,20 @@ public:
       ok &= fComm->write_param(0x38, 0xFFFF, trig_delay);
 
       int trig_width = 10;
-      fEq->fOdbEqSettings->RI("TRG/TrigWidthClk",  0, &trig_width, true);
+      fEq->fOdbEqSettings->RI("TRG/TrigWidthClk",  &trig_width, true);
       ok &= fComm->write_param(0x20, 0xFFFF, trig_width);
 
       int busy_width = 6250;
-      fEq->fOdbEqSettings->RI("TRG/BusyWidthClk",  0, &busy_width, true);
+      fEq->fOdbEqSettings->RI("TRG/BusyWidthClk",  &busy_width, true);
 
       int tdc_busy_width = 6250;
-      fEq->fOdbEqSettings->RI("TRG/TdcBusyWidthClk",  0, &tdc_busy_width, true);
+      fEq->fOdbEqSettings->RI("TRG/TdcBusyWidthClk",  &tdc_busy_width, true);
 
       int adc_busy_width = 6250;
-      fEq->fOdbEqSettings->RI("TRG/AdcBusyWidthClk",  0, &adc_busy_width, true);
+      fEq->fOdbEqSettings->RI("TRG/AdcBusyWidthClk",  &adc_busy_width, true);
 
       int pwb_busy_width = 208000;
-      fEq->fOdbEqSettings->RI("TRG/PwbBusyWidthClk",  0, &pwb_busy_width, true);
+      fEq->fOdbEqSettings->RI("TRG/PwbBusyWidthClk",  &pwb_busy_width, true);
 
       if (enableTdcTrigger) {
          if (tdc_busy_width > busy_width)
@@ -4701,7 +4701,7 @@ public:
             modid = -1;
 
          if (modid >= 0 && modid < 16) {
-            fEq->fOdbEqSettings->RS("ADC/modules",  modid, &fSasLinkModName[i], false);
+            fEq->fOdbEqSettings->RSAI("ADC/modules",  modid, &fSasLinkModName[i]);
          }
 
          fMfe->Msg(MINFO, "ReadSasBits", "%s: link %2d sas_bits: 0x%08x%08x, adc[%d], %s", fOdbName.c_str(), i, v1, v0, modid, fSasLinkModName[i].c_str());
@@ -5029,7 +5029,7 @@ public:
    void ThreadTrg()
    {
       printf("thread for %s started\n", fOdbName.c_str());
-      while (!fMfe->fShutdown) {
+      while (!fMfe->fShutdownRequested) {
          if (fComm->fFailed) {
             if (!fCheckComm.fFailed) {
                fCheckComm.Fail("see previous messages");
@@ -5045,7 +5045,7 @@ public:
             } else {
                fOk = false;
                for (int i=0; i<fConfFailedSleep; i++) {
-                  if (fMfe->fShutdown)
+                  if (fMfe->fShutdownRequested)
                      break;
                   sleep(1);
                }
@@ -5132,7 +5132,7 @@ public:
       uint32_t prev_ts_625 = 0;
 
       printf("data thread for %s started\n", fOdbName.c_str());
-      while (!fMfe->fShutdown) {
+      while (!fMfe->fShutdownRequested) {
          std::string errstr;
          char replybuf[fComm->kMaxPacketSize];
          int rd = fComm->readmsg(fComm->fDataSocket, replybuf, sizeof(replybuf), 10000, &errstr);
@@ -5268,7 +5268,7 @@ public:
 
    void WVD(const char* name, const std::vector<double> &v)
    {
-      if (fMfe->fShutdown)
+      if (fMfe->fShutdownRequested)
          return;
       
       std::string path;
@@ -5288,7 +5288,7 @@ public:
 
    void WVI(const char* name, const std::vector<int> &v)
    {
-      if (fMfe->fShutdown)
+      if (fMfe->fShutdownRequested)
          return;
       
       std::string path;
@@ -5315,7 +5315,7 @@ public:
 
       bool enable_trg = true;
 
-      fEq->fOdbEqSettings->RB("TRG/Enable", 0, &enable_trg, true);
+      fEq->fOdbEqSettings->RB("TRG/Enable", &enable_trg, true);
 
       if (enable_trg) {
          std::vector<std::string> names;
@@ -5338,7 +5338,7 @@ public:
 
       bool enable_adc = true;
 
-      fEq->fOdbEqSettings->RB("ADC/enable", 0, &enable_adc, true);
+      fEq->fOdbEqSettings->RB("ADC/enable", &enable_adc, true);
 
       int countAdc = 0;
          
@@ -5394,7 +5394,7 @@ public:
 
       bool enable_pwb = true;
 
-      fEq->fOdbEqSettings->RB("PWB/Enable", 0, &enable_pwb, true);
+      fEq->fOdbEqSettings->RB("PWB/Enable", &enable_pwb, true);
          
       if (enable_pwb) {
          // check that Init() is not called twice
@@ -5419,9 +5419,9 @@ public:
          double to_read = 10.0;
          double to_write = 2.0;
 
-         fEq->fOdbEqSettings->RD("PWB/connect_timeout", 0, &to_connect, true);
-         fEq->fOdbEqSettings->RD("PWB/read_timeout", 0, &to_read, true);
-         fEq->fOdbEqSettings->RD("PWB/write_timeout", 0, &to_write, true);
+         fEq->fOdbEqSettings->RD("PWB/connect_timeout", &to_connect, true);
+         fEq->fOdbEqSettings->RD("PWB/read_timeout", &to_read, true);
+         fEq->fOdbEqSettings->RD("PWB/write_timeout", &to_write, true);
 
          for (unsigned i=0; i<modules.size(); i++) {
             std::string name = modules[i];
@@ -6289,10 +6289,10 @@ public:
    {
       fMfe->Msg(MINFO, "BeginRun", "Begin run begin!");
 
-      fEq->fOdbEqSettings->RB("TRG/PassThrough", 0, &fConfTrigPassThrough, true);
-      fEq->fOdbEqSettings->RB("ADC/Trigger", 0, &fConfEnableAdcTrigger, true);
-      fEq->fOdbEqSettings->RB("PWB/enable_trigger", 0, &fConfEnablePwbTrigger, true);
-      fEq->fOdbEqSettings->RB("TDC/Trigger", 0, &fConfEnableTdcTrigger, true);
+      fEq->fOdbEqSettings->RB("TRG/PassThrough", &fConfTrigPassThrough, true);
+      fEq->fOdbEqSettings->RB("ADC/Trigger", &fConfEnableAdcTrigger, true);
+      fEq->fOdbEqSettings->RB("PWB/enable_trigger", &fConfEnablePwbTrigger, true);
+      fEq->fOdbEqSettings->RB("TDC/Trigger", &fConfEnableTdcTrigger, true);
 
 
       DWORD t0 = ss_millitime();
@@ -6523,8 +6523,8 @@ int main(int argc, char* argv[])
    eqc->LogHistory = 1;
    eqc->Buffer = "BUFTRG";
    
-   TMFeEquipment* eq = new TMFeEquipment("CTRL");
-   eq->Init(mfe->fOdbRoot, eqc);
+   TMFeEquipment* eq = new TMFeEquipment(mfe,"CTRL",eqc);
+   eq->Init();
    eq->SetStatus("Starting...", "white");
 
    mfe->RegisterEquipment(eq);
@@ -6537,13 +6537,15 @@ int main(int argc, char* argv[])
    ctrl->fEq = eq;
 
    mfe->RegisterRpcHandler(ctrl);
-   mfe->SetTransitionSequence(910, 90, -1, -1);
-
+   mfe->SetTransitionSequenceStart(910);
+   mfe->SetTransitionSequenceStop(90);
+   mfe->SetTransitionSequencePause(-1);
+   mfe->SetTransitionSequenceResume(-1);
    ctrl->LoadOdb();
 
    {
       int run_state = 0;
-      mfe->fOdbRoot->RI("Runinfo/State", 0, &run_state, false);
+      mfe->fOdbRoot->RI("Runinfo/State", &run_state, false);
       bool running = (run_state == 3);
       if (running) {
          ctrl->HandleBeginRun();
@@ -6558,7 +6560,7 @@ int main(int argc, char* argv[])
 
    time_t next_periodic = time(NULL) + 1;
 
-   while (!mfe->fShutdown) {
+   while (!mfe->fShutdownRequested) {
       time_t now = time(NULL);
 
       if (now > next_periodic) {
@@ -6605,7 +6607,7 @@ int main(int argc, char* argv[])
       }
 
       mfe->PollMidas(100);
-      if (mfe->fShutdown)
+      if (mfe->fShutdownRequested)
          break;
    }
 

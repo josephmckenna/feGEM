@@ -87,7 +87,7 @@ namespace Esper
     return KOtcpError();
   }
 
-  KOtcpError EsperComm::ReadVariables(TMVOdb* odb, const std::string& mid, EsperModuleData* vars)
+  KOtcpError EsperComm::ReadVariables(MVOdb* odb, const std::string& mid, EsperModuleData* vars)
   {
     if (fFailed)
       return KOtcpError("ReadVariables", "failed flag");

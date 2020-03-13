@@ -7,8 +7,7 @@
 
 #include "KOtcp.h"
 #include "JsonTo.h"
-#include "tmvodb.h"
-
+#include "tmfe.h"
 namespace Esper
 {
   struct EsperModuleData
@@ -45,7 +44,7 @@ namespace Esper
 
     KOtcpError GetModules(std::vector<std::string>* mid);
 
-    KOtcpError ReadVariables(TMVOdb* odb, const std::string& mid, EsperModuleData* vars);
+    KOtcpError ReadVariables(MVOdb* odb, const std::string& mid, EsperModuleData* vars);
     KOtcpError ReadVariables(const std::string& mid, EsperModuleData* vars);
     bool Write(const char* mid, const char* vid, const char* json, bool binaryn=false);
     std::string Read(const char* mid, const char* vid, std::string* last_errmsg = NULL);

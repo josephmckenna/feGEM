@@ -35,14 +35,17 @@ public:
    {
       fMfe = mfe;
       fEq  = eq;
-      //Default event size ok 10kb, will be overwritten by ODB entry
+      //Default event size ok 10kb, will be overwritten by ODB entry in Init()
       fEventSize = 10000;
       fEventBuf  = NULL;
 
       context = zmq_ctx_new ();
       responder = zmq_socket (context, ZMQ_REP);
       port=5555;
-     
+
+      //std::vector<std::string> ActiveCategorys;
+      //std::vector<odb handles...> ActiveCatagoryOdbHandle;
+      //std::vector<std::string> VarNames;//?
 
    }
 

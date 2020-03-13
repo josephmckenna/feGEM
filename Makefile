@@ -28,6 +28,7 @@ all:: test_tcp.exe
 #all:: grifc.exe
 all:: mlu_gen.exe
 all::febvlvdb.exe
+#all::feLabLIEW.exe
 all::feXsequencer.exe
 
 #fealpha16.exe: $(LIB) $(LIB_DIR)/mfe.o fealpha16.o mscbcxx.o
@@ -39,31 +40,31 @@ all::feXsequencer.exe
 mlu_gen.exe: mlu_gen.o
 	$(CXX) -o $@ $(CFLAGS) $^
 
-feevb.exe: $(LIB) $(LIB_DIR)/mfe.o feevb.o TsSync.o tmodb.o tmfe.o
+feevb.exe: $(LIB) $(LIB_DIR)/mfe.o feevb.o TsSync.o
 	$(CXX) -o $@ $(CFLAGS) $^ $(LIB) $(LDFLAGS) $(LIBS)
 
-fexudp.exe: $(LIB) fexudp.o tmodb.o tmfe.o
+fexudp.exe: $(LIB) fexudp.o 
 	$(CXX) -o $@ $(CFLAGS) $^ $(LIB) $(LDFLAGS) $(LIBS)
 
 #feyair.exe: %.exe: %.o KOsocket.o tmfe.o
 #	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS)
 
-fecaenr14xxet.exe: %.exe: %.o KOtcp.o tmfe.o tmodb.o
+fecaenr14xxet.exe: %.exe: %.o KOtcp.o
 	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS)
 
-fewienerlvps.exe: %.exe: %.o tmfe.o tmodb.o
+fewienerlvps.exe: %.exe: %.o
 	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS)
 
-femoxa.exe: %.exe: %.o KOtcp.o tmfe.o tmodb.o
+femoxa.exe: %.exe: %.o KOtcp.o
 	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS)
 
-fegastelnet.exe: %.exe: %.o KOtcp.o tmfe.o tmodb.o
+fegastelnet.exe: %.exe: %.o KOtcp.o
 	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS)
 
-fectrl.exe: %.exe: %.o KOtcp.o tmfe.o tmodb.o
+fectrl.exe: %.exe: %.o KOtcp.o
 	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS)
 
-febvlvdb.exe: KOtcp.o JsonTo.o EsperComm.o febvlvdb.o tmfe.o tmodb.o
+febvlvdb.exe: KOtcp.o JsonTo.o EsperComm.o febvlvdb.o
 	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS)
 
 #feice450.exe: %.exe: %.o tmfe.o tmodb.o
@@ -71,6 +72,9 @@ febvlvdb.exe: KOtcp.o JsonTo.o EsperComm.o febvlvdb.o tmfe.o tmodb.o
 
 test_tcp.exe: KOtcp.cxx
 	$(CXX) -o $@ -DMAIN $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS)
+
+feLabLIEW.exe: %.exe: %.o $(LIB) $(LIB_DIR)/mfe.o
+	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS)
 
 #modbus.exe: %.exe: %.o ModbusTcp.o
 #	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS)
@@ -85,12 +89,16 @@ feXsequencer.exe:
 	make feDsequencer.exe
 	make feEsequencer.exe
 
-fe%sequencer.exe: $(LIB) $(LIB_DIR)/mfe.o fe%sequencer.o tmodb.o tmfe.o 
+fe%sequencer.exe: $(LIB) $(LIB_DIR)/mfe.o fe%sequencer.o
 	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS)
 #	$(CXX) -o $@ $(CFLAGS)  $^ $(LIB) $(LIBS)
 
 fe%sequencer.o: feXsequencer.cxx
 	$(CXX) -o $@ $(CFLAGS) -DSEQID=\"$*\" -c $<
+
+
+
+
 
 %.o: %.cxx
 	$(CXX) -o $@ $(CFLAGS) -c $<

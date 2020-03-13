@@ -29,7 +29,6 @@
 
 
 
-#include "tmvodb.h"
 #include "tmfe.h"
 #include "mfe.h"
 
@@ -48,8 +47,8 @@ std::vector<std::string> allowed_hosts;
 /* make frontend functions callable from the C framework */
 
 /*-- Globals -------------------------------------------------------*/
-static TMVOdb* gSeqSettings = NULL; // ODB /Equipment/sequencerB/Settings/
-static TMVOdb* gExpSettings = NULL; // ODB /Equipment/sequencerB/Settings/
+static MVOdb* gSeqSettings = NULL; // ODB /Equipment/sequencerB/Settings/
+static MVOdb* gExpSettings = NULL; // ODB /Equipment/sequencerB/Settings/
 /* The frontend name (client name) as seen by other MIDAS clients   */
 const char *frontend_name = "fe" SEQID "sequencer";
 /* The frontend file name, don't change it */
@@ -190,11 +189,11 @@ INT frontend_init()
    int listen_port=12020 + ((int)*SEQID-(int)'A');
    gExpSettings->Chdir("/experiment",false);
    std::string experiment_name;
-   gExpSettings->RS("name", 0, &experiment_name, false);
+   gExpSettings->RS("name", &experiment_name, false);
    if( !strcmp(experiment_name.c_str(),"agdaq") )
    {
       listen_port+=100;
-      gSeqSettings->RI("tcp_port",0,&listen_port,true);
+      gSeqSettings->RI("tcp_port",&listen_port,true);
    }
    status = openListenSocket(listen_port);
    if (status != FE_SUCCESS)

@@ -6,7 +6,6 @@
 #include <signal.h>
 
 #include "tmfe.h"
-#include "tmvodb.h"
 
 #include "midas.h"
 
@@ -17,9 +16,9 @@ class BVlvdb: public TMFeRpcHandlerInterface
 private:
   TMFE* fFe=0;
   TMFeEquipment* fEq=0;
-  TMVOdb* fS=0; // Settings
-  TMVOdb* fV=0; // Variables
-  TMVOdb* fR=0; // Readback
+  MVOdb* fS=0; // Settings
+  MVOdb* fV=0; // Variables
+  MVOdb* fR=0; // Readback
 
   Esper::EsperComm* fEsper=0;
   std::vector<std::string> fModules;
@@ -101,9 +100,9 @@ public:
     fS->RDA("asd_dac_setpoint",&fDemandDAC,true,fDemandDAC.size());
 
     fDACsetcomm=false;
-    fS->RB("asd_dac_setcommon",0,&fDACsetcomm,true);
+    fS->RB("asd_dac_setcommon",&fDACsetcomm,true);
     fDemandDACcomm=0.;
-    fS->RD("asd_dac_common_setpoint",0,&fDemandDACcomm,true);
+    fS->RD("asd_dac_common_setpoint",&fDemandDACcomm,true);
   }
 
   bool ReadVariables()
@@ -185,12 +184,12 @@ public:
     fEsper->Close();
 
 
-    fS->RB("asd_dac_setcommon",0,&fDACsetcomm,false);
+    fS->RB("asd_dac_setcommon",&fDACsetcomm,false);
     
     if( fDACsetcomm )
       {
 	sleep(3);
-	fS->RD("asd_dac_common_setpoint",0,&fDemandDACcomm,false);
+	fS->RD("asd_dac_common_setpoint",&fDemandDACcomm,false);
 	json = "[,";
 	for(auto it = fDemandDAC.begin(); it != fDemandDAC.end(); ++it)
 	  {
@@ -283,8 +282,8 @@ int main(int argc, char* argv[])
 
    std::string eqname("BVlv");
    eqname+=end;
-   TMFeEquipment* eq = new TMFeEquipment(eqname.c_str());
-   eq->Init(mfe->fOdbRoot, eqc);
+   TMFeEquipment* eq = new TMFeEquipment(mfe,eqname.c_str(),eqc);
+   eq->Init();
    eq->SetStatus("Starting...", "white");
 
    mfe->RegisterEquipment(eq);
@@ -302,7 +301,7 @@ int main(int argc, char* argv[])
    mfe->Msg(MINFO, eqc->FrontendName.c_str(), "started");
 
 
-   while (!mfe->fShutdown) 
+   while (!mfe->fShutdownRequested) 
      {
        bool statr = bv->ReadVariables();
        bool statw = bv->WriteSettings();
@@ -320,7 +319,7 @@ int main(int argc, char* argv[])
 	{
 	 //mfe->Msg(MINFO, "main", "fast update!");
 	  mfe->PollMidas(1000);
-	 if (mfe->fShutdown)
+	 if (mfe->fShutdownRequested)
 	    break;
          } 
       else 
@@ -328,10 +327,10 @@ int main(int argc, char* argv[])
 	  for (int i=0; i<bv->fReadPeriodSec; i++) 
 	    {
 	      mfe->PollMidas(1000);
-	      if (mfe->fShutdown)
+	      if (mfe->fShutdownRequested)
 		break;
             }
-	  if (mfe->fShutdown)
+	  if (mfe->fShutdownRequested)
 	    break;
 	}
      }
