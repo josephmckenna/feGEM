@@ -91,8 +91,8 @@ add_executable(test_tcp.exe KOtcp)
 target_compile_definitions(test_tcp.exe PRIVATE MAIN)
 target_link_libraries(test_tcp.exe ${LIB} ${LIBS} )
 
-add_executable(feLabVIEW.exe feLabVIEW)
-target_link_libraries(feLabVIEW.exe ${LIB} ${LIBS} zmq )
+#add_executable(feLabVIEW.exe feLabVIEW)
+#target_link_libraries(feLabVIEW.exe ${LIB} ${LIBS} zmq )
 
 foreach( SEQID A B C D E F G )
    #string(CONCAT BIN [fe $(SEQID) sequencer] )
