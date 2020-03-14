@@ -1,7 +1,8 @@
 //
-// fetest_tmfe.cxx
+// feLabVIEW.cxx
 //
-// Frontend for test and example of tmfe c++ frontend
+// Frontend for two way communication to labVIEW
+// JTK McKENNA
 //
 
 #include <stdio.h>
@@ -14,6 +15,90 @@
 #include "tmfe.h"
 
 #include <zmq.h>
+#include "feLabVIEW.h"
+
+class HistoryVariable
+{
+   public:
+   std::string fCategory;
+   std::string fVarName;
+   int64_t fLastUpdate; //Converted to UXIXTime
+   int UpdateFrequency;
+   template<typename T>
+   HistoryVariable(const LVBANK<T>* lvbank)
+   {
+      fCategory=lvbank->NAME.VARCATEGORY;
+      fVarName=lvbank->NAME.VARNAME;
+      UpdateFrequency=lvbank->HistoryRate;
+      fLastUpdate=0;
+   }
+   template<typename T>
+   bool IsMatch(const LVBANK<T>* lvbank)
+   {
+      if (strcmp(fCategory.c_str(),lvbank->NAME.VARCATEGORY)!=0)
+         return false;
+      if (strcmp(fVarName.c_str(),lvbank->NAME.VARNAME)!=0)
+         return false;
+      return true;
+   }
+   template<typename T>
+   void Update(const LVBANK<T>* lvbank)
+   {
+      //If the data is from less that 'UpdateFrequency' ago
+      if (lvbank->DATA.back()->CoarseTime < fLastUpdate+UpdateFrequency)
+         return;
+      fLastUpdate=lvbank->DATA.back()->CoarseTime;
+
+      std::cout<<"NOT UPDATING ODB!!!WIP"<<std::endl;
+   }
+};
+
+class HistoryLogger
+{
+public:
+   MVOdb* link;
+   std::vector<HistoryVariable*> fVariables;
+   HistoryLogger()
+   {
+   }
+   template<typename T>
+   HistoryVariable* AddNewVariable(const LVBANK<T>* lvbank)
+   {
+      fVariables.push_back(new HistoryVariable(lvbank));
+      //Add entry to ODB of what var we are loggoing
+      //ODB write (feLabVIEW/host/category/varname)
+      std::cout<<"NOT LOGGING WHAT VAR IS LOGGING TO ODB BECAUSE WIP!"<<std::endl;
+      return fVariables.back();
+   }
+   template<typename T>
+   HistoryVariable* Find(const LVBANK<T>* lvbank, bool AddIfNotFound=true)
+   {
+      HistoryVariable* FindThis=NULL;
+      //Find HistoryVariable that matches 
+      for (auto var: fVariables)
+      {
+         if (var->IsMatch(lvbank))
+         {
+            FindThis=var;
+            break;
+         }
+      }
+      //If no match found... create one
+      if (!FindThis && AddIfNotFound)
+      {
+         FindThis=AddNewVariable(lvbank);
+      }
+      return FindThis;
+   }
+   template<typename T>
+   void Update(const LVBANK<T>* lvbank)
+   {
+      HistoryVariable* UpdateThis=Find(lvbank,true);
+      UpdateThis->Update(lvbank);
+   }
+};
+
+
 class Myfe :
    public TMFeRpcHandlerInterface,
    public  TMFePeriodicHandlerInterface
@@ -31,6 +116,9 @@ public:
 
    int fEventSize;
    char* fEventBuf;
+
+   HistoryLogger logger;
+
    Myfe(TMFE* mfe, TMFeEquipment* eq) // ctor
    {
       fMfe = mfe;
@@ -42,10 +130,8 @@ public:
       context = zmq_ctx_new ();
       responder = zmq_socket (context, ZMQ_REP);
       port=5555;
+      
 
-      //std::vector<std::string> ActiveCategorys;
-      //std::vector<odb handles...> ActiveCatagoryOdbHandle;
-      //std::vector<std::string> VarNames;//?
 
    }
 
@@ -121,7 +207,11 @@ public:
    const char* HandleBank()
    {
       std::cout<<"BANK:"<<fEventBuf[0]<<fEventBuf[1]<<fEventBuf[2]<<fEventBuf[3]<<std::endl;
-
+      char DATATYPE[5];
+      for (int i=0; i<4; i++)
+         DATATYPE[i]=fEventBuf[i+4];
+      DATATYPE[4]=0;
+      std::cout<<DATATYPE<<std::endl;
       uint32_t number_of_bytes, number_of_banks;
       int offset=4+4+16+16+32+4+4;
       memcpy(&number_of_bytes, fEventBuf+offset, 4);
@@ -134,6 +224,32 @@ public:
          sprintf(error,"ERROR: More bytes sent (%d) than MIDAS has assiged for buffer (%d)",number_of_bytes,fEventSize);
          return error;
       }
+      //std::istream is();//ios_base::binary
+      //std::stringstream is(fEventBuf);
+      if (strcmp(DATATYPE,"DBLE")==0)
+      {
+         LVBANK<double> bank(fEventBuf);
+         //bank<<(const char*)fEventBuf;]
+         //std::istream is(&fEventBuf);
+         //std::istream* s=std::istream::get(fEventBuf,fEventSize);
+         //is>>bank;
+                  //is.get(fEventBuf,fEventSize)>>bank;
+         //pbuf>>bank;
+         bank.print();
+         logger.Update(&bank);
+      } else if (strcmp(DATATYPE,"INT3")==0)
+      {
+         LVBANK<int32_t> bank;
+         //bank<<fEventBuf;
+         //is.get(fEventBuf,fEventSize)>>bank;
+         bank.print();
+         logger.Update(&bank);
+      } else {
+         std::cout<<"Unknown bank data type... "<<std::endl;
+         exit(1);
+      }
+      
+
       return 0;
    }
    void AnnounceError(const char* error)

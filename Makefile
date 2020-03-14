@@ -28,7 +28,7 @@ all:: test_tcp.exe
 #all:: grifc.exe
 all:: mlu_gen.exe
 all::febvlvdb.exe
-#all::feLabLIEW.exe
+all::feLabVIEW.exe
 all::feXsequencer.exe
 
 #fealpha16.exe: $(LIB) $(LIB_DIR)/mfe.o fealpha16.o mscbcxx.o
@@ -73,8 +73,8 @@ febvlvdb.exe: KOtcp.o JsonTo.o EsperComm.o febvlvdb.o
 test_tcp.exe: KOtcp.cxx
 	$(CXX) -o $@ -DMAIN $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS)
 
-feLabLIEW.exe: %.exe: %.o $(LIB) $(LIB_DIR)/mfe.o
-	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS)
+feLabVIEW.exe: %.exe: %.o
+	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS) -lzmq
 
 #modbus.exe: %.exe: %.o ModbusTcp.o
 #	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS)
