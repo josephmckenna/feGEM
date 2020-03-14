@@ -51,7 +51,7 @@ class HistoryVariable
       
       const LVDATA<T>* LatestData=&lvbank->DATA[(entries-1)*data_size];
       
-      if (LatestData->CoarseTime < fLastUpdate+UpdateFrequency)
+      if (LatestData->CoarseTime < fLastUpdate + UpdateFrequency)
          return;
       fLastUpdate=LatestData->CoarseTime;
 
@@ -136,9 +136,6 @@ public:
       context = zmq_ctx_new ();
       responder = zmq_socket (context, ZMQ_REP);
       port=5555;
-      
-
-
    }
 
    ~Myfe() // dtor
@@ -193,75 +190,86 @@ public:
       fMfe->Msg(MINFO, "HandleEndRun", "End run!");
       fEq->SetStatus("Stopped", "#00FF00");
    }
+   void LogBank(const char* buf)
+   {
+      LVBANK<void*>* ThisBank=(LVBANK<void*>*)buf;
+      if (strncmp(ThisBank->NAME.DATATYPE,"DBL",3)==0) {
+         LVBANK<double>* bank=(LVBANK<double>*)buf;
+         //bank->print();
+         logger.Update(bank);
+      } else if (strncmp(ThisBank->NAME.DATATYPE,"FLT",3)==0) {
+         LVBANK<float>* bank=(LVBANK<float>*)buf;
+         logger.Update(bank);
+      } else if (strncmp(ThisBank->NAME.DATATYPE,"I64",3)==0) {
+         LVBANK<int64_t>* bank=(LVBANK<int64_t>*)buf;
+         logger.Update(bank);
+      } else if (strncmp(ThisBank->NAME.DATATYPE,"U64",3)==0) {
+         LVBANK<uint64_t>* bank=(LVBANK<uint64_t>*)buf;
+         logger.Update(bank);
+      } else if (strncmp(ThisBank->NAME.DATATYPE,"I32",3)==0) {
+         LVBANK<int32_t>* bank=(LVBANK<int32_t>*)buf;
+         logger.Update(bank);
+      } else if (strncmp(ThisBank->NAME.DATATYPE,"U32",3)==0) {
+         LVBANK<uint32_t>* bank=(LVBANK<uint32_t>*)buf;
+         logger.Update(bank);
+      } else if (strncmp(ThisBank->NAME.DATATYPE,"I16",3)==0) {
+         LVBANK<int16_t>* bank=(LVBANK<int16_t>*)buf;
+         logger.Update(bank);
+      } else if (strncmp(ThisBank->NAME.DATATYPE,"U16",3)==0) {
+         LVBANK<uint16_t>* bank=(LVBANK<uint16_t>*)buf;
+         logger.Update(bank);
+      } else if (strncmp(ThisBank->NAME.DATATYPE,"I8",2)==0) {
+         LVBANK<int8_t>* bank=(LVBANK<int8_t>*)buf;
+         logger.Update(bank);
+      } else if (strncmp(ThisBank->NAME.DATATYPE,"U8",2)==0) {
+         LVBANK<uint8_t>* bank=(LVBANK<uint8_t>*)buf;
+         logger.Update(bank);
+      } else if (strncmp(ThisBank->NAME.DATATYPE,"CHAR",4)==0) {
+         LVBANK<char>* bank=(LVBANK<char>*)buf;
+         logger.Update(bank);
+      } else {
+         std::cout<<"Unknown bank data type... "<<std::endl;
+         ThisBank->print();
+         exit(1);
+      }
+      return;
+   }
+
    const char* HandleBankArray()
    {
       LVBANKARRAY* array=(LVBANKARRAY*)fEventBuf;
+      if (array->BlockSize + array->GetHeaderSize() > (uint32_t)fEventSize)
+      {
+         char error[100];
+         sprintf(error,"ERROR: More bytes sent (%u) than MIDAS has assiged for buffer (%u)",array->BlockSize+ array->GetHeaderSize(),fEventSize);
+         return error;
+      }
       array->print();
       char *buf=(char*)&array->DATA[0];
-      for (int i=0; i<array->NumberOfEntries; i++)
+      for (uint32_t i=0; i<array->NumberOfEntries; i++)
       {
-         BANK_TITLE* title=(BANK_TITLE*)buf;
-         //title->print();
-         if (strncmp(title->DATATYPE,"DBLE",4)==0)
-         {
-            LVBANK<double>* bank=(LVBANK<double>*)buf;
-            bank->print();
-            buf+=bank->GetHeaderSize()+bank->BlockSize*bank->NumberOfEntries;
-            logger.Update(bank);
-         } else if (strncmp(title->DATATYPE,"INT3",4)==0)
-         {
-            LVBANK<int32_t>* bank=(LVBANK<int32_t>*)buf;
-            bank->print();
-            buf+=bank->GetHeaderSize()+bank->BlockSize*bank->NumberOfEntries;
-            logger.Update(bank);
-         } else {
-            char error[100];
-            sprintf(error,"ERROR: Unknown data type %.4s",title->DATATYPE);
-            return error;
-         }
+         LVBANK<double>* bank=(LVBANK<double>*)buf;
+         LogBank(buf);
+         buf+=bank->GetHeaderSize()+bank->BlockSize*bank->NumberOfEntries;
       }
       return NULL;
    }
    const char* HandleBank()
    {
-      std::cout<<"BANK:"<<fEventBuf[0]<<fEventBuf[1]<<fEventBuf[2]<<fEventBuf[3]<<std::endl;
-      char DATATYPE[5];
-      for (int i=0; i<4; i++)
-         DATATYPE[i]=fEventBuf[i+4];
-      DATATYPE[4]=0;
-      std::cout<<DATATYPE<<std::endl;
-      uint32_t number_of_bytes, number_of_banks;
-      int offset=4+4+16+16+32+4+4;
-      memcpy(&number_of_bytes, fEventBuf+offset, 4);
-      memcpy(&number_of_banks, fEventBuf+offset+4, 4);
-      std::cout<<"NumberOfBytes"<<number_of_bytes<<std::endl;
-      std::cout<<"NumberOfBanks"<<number_of_banks<<std::endl;
-      if (number_of_bytes+offset+16>fEventSize)
+      //Use invalid data type to probe the header
+      LVBANK<void*>* ThisBank=(LVBANK<void*>*)fEventBuf;
+      if (ThisBank->BlockSize+ThisBank->GetHeaderSize() > (uint32_t)fEventSize)
       {
          char error[100];
-         sprintf(error,"ERROR: More bytes sent (%d) than MIDAS has assiged for buffer (%d)",number_of_bytes,fEventSize);
+         sprintf(error,"ERROR: More bytes sent (%u) than MIDAS has assiged for buffer (%u)",ThisBank->BlockSize+ThisBank->GetHeaderSize(),fEventSize);
          return error;
       }
-      //std::istream is();//ios_base::binary
-      //std::stringstream is(fEventBuf);
-      if (strcmp(DATATYPE,"DBLE")==0)
-      {
-         LVBANK<double>* bank=(LVBANK<double>*)fEventBuf;
-         bank->print();
-         logger.Update(bank);
-      } else if (strcmp(DATATYPE,"INT3")==0)
-      {
-         LVBANK<uint32_t>* bank=(LVBANK<uint32_t>*)fEventBuf;
-         bank->print();
-         logger.Update(bank);
-      } else {
-         std::cout<<"Unknown bank data type... "<<std::endl;
-         exit(1);
-      }
-      return 0;
+      LogBank(fEventBuf);
+      return NULL;
    }
    void AnnounceError(const char* error)
    {
+      fMfe->Msg(MTALK, "HandleEndRun", "End run!");
       std::cout<<"IMPLEMENT SPEAK OF:"<<error<<std::endl;
    }
    void HandlePeriodic()
@@ -288,10 +296,6 @@ public:
          std::cout<<"Unknown data type just received... "<<std::endl;
          exit(1);
       }
-      //zmq_msg_t* msg;
-      //zmq_recvmsg (responder, msg, 0);
-      //zmq_recv (responder, buffer, 10, ZMQ_NOBLOCK);
-      //printf ("Received (%s)\n",msg);
       if (error)
       {
          zmq_send (responder, error, strlen(error), 0);
