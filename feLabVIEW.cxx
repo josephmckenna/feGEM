@@ -195,36 +195,25 @@ public:
    }
    const char* HandleBankArray()
    {
-/*      std::cout<<"BANKARRAY:"<<fEventBuf[0]<<fEventBuf[1]<<fEventBuf[2]<<fEventBuf[3]<<std::endl;
-	  uint32_t number_of_bytes, number_of_banks;
-	  memcpy(&number_of_bytes, fEventBuf+4, 4);
-	  memcpy(&number_of_banks, fEventBuf+8, 4);
-      std::cout<<"NumberOfBytes"<<number_of_bytes<<std::endl;
-      std::cout<<"NumberOfBanks"<<number_of_banks<<std::endl;
-      if (number_of_bytes+16>fEventSize)
-      {
-         char error[100];
-         sprintf(error,"ERROR: More bytes sent (%d) than MIDAS has assiged for buffer (%d)",number_of_bytes,fEventSize);
-         return error;
-      
-      }*/
       LVBANKARRAY* array=(LVBANKARRAY*)fEventBuf;
       array->print();
-      char *buf=(char*)fEventBuf+array->GetHeaderSize();
+      char *buf=(char*)&array->DATA[0];
       for (int i=0; i<array->NumberOfEntries; i++)
       {
          BANK_TITLE* title=(BANK_TITLE*)buf;
-         title->print();
+         //title->print();
          if (strncmp(title->DATATYPE,"DBLE",4)==0)
          {
             LVBANK<double>* bank=(LVBANK<double>*)buf;
             bank->print();
-            //logger.Update(bank);
+            buf+=bank->GetHeaderSize()+bank->BlockSize*bank->NumberOfEntries;
+            logger.Update(bank);
          } else if (strncmp(title->DATATYPE,"INT3",4)==0)
          {
-            LVBANK<int32_t> bank;
-            bank.print();
-            //logger.Update(&bank);
+            LVBANK<int32_t>* bank=(LVBANK<int32_t>*)buf;
+            bank->print();
+            buf+=bank->GetHeaderSize()+bank->BlockSize*bank->NumberOfEntries;
+            logger.Update(bank);
          } else {
             char error[100];
             sprintf(error,"ERROR: Unknown data type %.4s",title->DATATYPE);
@@ -258,27 +247,17 @@ public:
       if (strcmp(DATATYPE,"DBLE")==0)
       {
          LVBANK<double>* bank=(LVBANK<double>*)fEventBuf;
-         //bank<<(const char*)fEventBuf;]
-         //std::istream is(&fEventBuf);
-         //std::istream* s=std::istream::get(fEventBuf,fEventSize);
-         //is>>bank;
-                  //is.get(fEventBuf,fEventSize)>>bank;
-         //pbuf>>bank;
          bank->print();
          logger.Update(bank);
       } else if (strcmp(DATATYPE,"INT3")==0)
       {
-         LVBANK<int32_t> bank;
-         //bank<<fEventBuf;
-         //is.get(fEventBuf,fEventSize)>>bank;
-         bank.print();
-         logger.Update(&bank);
+         LVBANK<uint32_t>* bank=(LVBANK<uint32_t>*)fEventBuf;
+         bank->print();
+         logger.Update(bank);
       } else {
          std::cout<<"Unknown bank data type... "<<std::endl;
          exit(1);
       }
-      
-
       return 0;
    }
    void AnnounceError(const char* error)

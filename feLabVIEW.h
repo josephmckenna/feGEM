@@ -74,28 +74,36 @@ struct LVBANK {
       {
          char* buf=(char*)&DATA;
          LVDATA<T>* data=(LVDATA<T>*)buf;
-         data->print(BlockSize/NumberOfEntries);
-         buf+=BlockSize/NumberOfEntries;
+         data->print(BlockSize);
+         buf+=BlockSize;
       }
    }
-   uint64_t get_actual_size()
+   uint64_t GetHeaderSize()
    {
-      uint64_t front=(uint64_t)&NAME;
-      uint64_t back=(uint64_t)&NumberOfEntries+sizeof(NumberOfEntries) + (uint64_t)BlockSize;
-      return back-front;
+      return sizeof(NAME)
+             + sizeof(EquipmentType)
+             + sizeof(HistoryRate)
+             + sizeof(other)
+             + sizeof(BlockSize)
+             + sizeof(NumberOfEntries);
+   }
+   uint64_t GetSize()
+   {
+      return GetHeaderSize()+BlockSize*NumberOfEntries;
    }
 
 };
 
 struct LVBANKARRAY {
    char BANK[4];
+   char PAD[4];
    uint32_t BlockSize;
    uint32_t NumberOfEntries;
    //Block of data of unknown type;
    char* DATA[];
    uint32_t GetHeaderSize()
    {
-      return 4+4+4;
+      return sizeof(BANK)+sizeof(PAD)+sizeof(BlockSize)+sizeof(NumberOfEntries);
    }
    void print()
    {
