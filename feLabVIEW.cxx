@@ -45,9 +45,15 @@ class HistoryVariable
    void Update(const LVBANK<T>* lvbank)
    {
       //If the data is from less that 'UpdateFrequency' ago
-      if (lvbank->DATA.back()->CoarseTime < fLastUpdate+UpdateFrequency)
+      uint32_t data_block_size=lvbank->BlockSize;
+      uint32_t entries=lvbank->NumberOfEntries;
+      uint32_t data_size=data_block_size/entries;
+      
+      const LVDATA<T>* LatestData=&lvbank->DATA[(entries-1)*data_size];
+      
+      if (LatestData->CoarseTime < fLastUpdate+UpdateFrequency)
          return;
-      fLastUpdate=lvbank->DATA.back()->CoarseTime;
+      fLastUpdate=LatestData->CoarseTime;
 
       std::cout<<"NOT UPDATING ODB!!!WIP"<<std::endl;
    }
@@ -189,7 +195,7 @@ public:
    }
    const char* HandleBankArray()
    {
-      std::cout<<"BANKARRAY:"<<fEventBuf[0]<<fEventBuf[1]<<fEventBuf[2]<<fEventBuf[3]<<std::endl;
+/*      std::cout<<"BANKARRAY:"<<fEventBuf[0]<<fEventBuf[1]<<fEventBuf[2]<<fEventBuf[3]<<std::endl;
 	  uint32_t number_of_bytes, number_of_banks;
 	  memcpy(&number_of_bytes, fEventBuf+4, 4);
 	  memcpy(&number_of_banks, fEventBuf+8, 4);
@@ -201,6 +207,29 @@ public:
          sprintf(error,"ERROR: More bytes sent (%d) than MIDAS has assiged for buffer (%d)",number_of_bytes,fEventSize);
          return error;
       
+      }*/
+      LVBANKARRAY* array=(LVBANKARRAY*)fEventBuf;
+      array->print();
+      char *buf=(char*)fEventBuf+array->GetHeaderSize();
+      for (int i=0; i<array->NumberOfEntries; i++)
+      {
+         BANK_TITLE* title=(BANK_TITLE*)buf;
+         title->print();
+         if (strncmp(title->DATATYPE,"DBLE",4)==0)
+         {
+            LVBANK<double>* bank=(LVBANK<double>*)buf;
+            bank->print();
+            //logger.Update(bank);
+         } else if (strncmp(title->DATATYPE,"INT3",4)==0)
+         {
+            LVBANK<int32_t> bank;
+            bank.print();
+            //logger.Update(&bank);
+         } else {
+            char error[100];
+            sprintf(error,"ERROR: Unknown data type %.4s",title->DATATYPE);
+            return error;
+         }
       }
       return NULL;
    }
@@ -228,15 +257,15 @@ public:
       //std::stringstream is(fEventBuf);
       if (strcmp(DATATYPE,"DBLE")==0)
       {
-         LVBANK<double> bank(fEventBuf);
+         LVBANK<double>* bank=(LVBANK<double>*)fEventBuf;
          //bank<<(const char*)fEventBuf;]
          //std::istream is(&fEventBuf);
          //std::istream* s=std::istream::get(fEventBuf,fEventSize);
          //is>>bank;
                   //is.get(fEventBuf,fEventSize)>>bank;
          //pbuf>>bank;
-         bank.print();
-         logger.Update(&bank);
+         bank->print();
+         logger.Update(bank);
       } else if (strcmp(DATATYPE,"INT3")==0)
       {
          LVBANK<int32_t> bank;
@@ -254,7 +283,7 @@ public:
    }
    void AnnounceError(const char* error)
    {
-
+      std::cout<<"IMPLEMENT SPEAK OF:"<<error<<std::endl;
    }
    void HandlePeriodic()
    {
