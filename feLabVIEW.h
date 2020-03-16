@@ -18,12 +18,12 @@ struct LVDATA {
    //(u64) positive fractions of a second 
    uint64_t FineTime;
    T DATA[];
-   uint32_t GetHeaderSize()
+   uint32_t GetHeaderSize() const
    {
       return sizeof(CoarseTime)
              + sizeof(FineTime);
    }
-   uint32_t GetEntries(uint32_t size)
+   uint32_t GetEntries(uint32_t size) const
    {
       return (size-GetHeaderSize())/sizeof(T);
    }
@@ -49,7 +49,7 @@ struct BANK_TITLE {
    char DATATYPE[4]={0}; //DBLE, UINT, INT6, INT3, INT1, INT8, CHAR
    char VARCATEGORY[16]={0};
    char VARNAME[16]={0};
-   void print()
+   void print() const
    {
       printf("  BANK:%.4s\n",BANK);
       printf("  DATATYPE:%.4s\n",DATATYPE);
@@ -66,7 +66,7 @@ struct LVBANK {
    uint32_t BlockSize;
    uint32_t NumberOfEntries;
    LVDATA<T> DATA[];
-   void print()
+   void print() const
    {
       NAME.print();
       std::cout<<"  EquipmentType:"<<EquipmentType<<std::endl;
@@ -101,7 +101,9 @@ struct LVBANK {
    }
    const LVDATA<T>* GetLastDataEntry() const
    {
-      return &DATA[(NumberOfEntries-1)*BlockSize];
+      char* ptr=(char*)&DATA;
+      ptr+=BlockSize*(NumberOfEntries-1);
+      return (LVDATA<T>*)ptr;
    }
    const int64_t GetFirstUnixTimestamp() const 
    {

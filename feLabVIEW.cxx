@@ -24,13 +24,18 @@ class HistoryVariable
    std::string fVarName;
    int64_t fLastUpdate; //Converted to UXIXTime
    int UpdateFrequency;
+   MVOdb* fOdbEqVariables; 
    template<typename T>
-   HistoryVariable(const LVBANK<T>* lvbank)
+   HistoryVariable(const LVBANK<T>* lvbank, TMFE* mfe )
    {
       fCategory=lvbank->NAME.VARCATEGORY;
       fVarName=lvbank->NAME.VARNAME;
       UpdateFrequency=lvbank->HistoryRate;
       fLastUpdate=0;
+
+      //Prepare ODB entry for variable
+      MVOdb* OdbEq = mfe->fOdbRoot->Chdir((std::string("Equipment/") + fCategory).c_str(), true);
+      fOdbEqVariables  = OdbEq->Chdir("Variables", true);
    }
    template<typename T>
    bool IsMatch(const LVBANK<T>* lvbank)
@@ -45,12 +50,56 @@ class HistoryVariable
    void Update(const LVBANK<T>* lvbank)
    {
       const LVDATA<T>* data=lvbank->GetLastDataEntry();
+      //std::cout <<data->GetUnixTimestamp() <<" <  " <<fLastUpdate + UpdateFrequency <<std::endl;
       if (data->GetUnixTimestamp() < fLastUpdate + UpdateFrequency)
          return;
       fLastUpdate=data->GetUnixTimestamp();
-
-      std::cout<<"NOT UPDATING ODB!!!WIP"<<std::endl;
+      const int data_entries=data->GetEntries(lvbank->BlockSize);
+      std::vector<T> array(data_entries);
+      for (int i=0; i<data_entries; i++)
+         array[i]=data->DATA[i];
+      WriteODB(array);
    }
+   private:
+   void WriteODB(std::vector<bool>& data)
+   {
+      fOdbEqVariables->WBA(fVarName.c_str(),data);
+   }
+   void WriteODB(std::vector<int>& data)
+   {
+      fOdbEqVariables->WIA(fVarName.c_str(),data);
+   }
+   void WriteODB(std::vector<double>& data)
+   {
+      fOdbEqVariables->WDA(fVarName.c_str(),data);
+   }
+   void WriteODB(std::vector<float>& data)
+   {
+      fOdbEqVariables->WFA(fVarName.c_str(),data);
+   }
+   void WriteODB(std::vector<char>& data)
+   {
+      //Note: Char arrays not supported... but std::string is supported...
+      const int data_entries=data.size();
+      std::vector<std::string> array(data_entries);
+      size_t max_size=0;
+      for (int i=0; i<data_entries; i++)
+      {
+         array[i]=data[i];
+         if (array[i].size()>max_size)
+             max_size=array[i].size();
+      }
+      fOdbEqVariables->WSA(fVarName.c_str(),array,max_size);
+   }
+   /*void WriteODB(std::vector<int16_t>& data)
+   {
+      fOdbEqVariables->WU16A(fVarName.c_str(),data);
+   }*/
+   /*void WriteODB(std::vector<int32_t>& data)
+   {
+      fOdbEqVariables->WU32A(fVarName.c_str(),data)
+   }*/
+
 };
 
 class HistoryLogger
@@ -63,6 +112,13 @@ public:
    {
       fEq=eq;
       fMfe=mfe;
+   }
+   ~HistoryLogger()
+   {
+      //I do not own fMfe or fEq
+      for (auto* var: fVariables)
+         delete var;
+      fVariables.clear();
    }
    template<typename T>
    HistoryVariable* AddNewVariable(const LVBANK<T>* lvbank)
@@ -78,7 +134,7 @@ public:
       fEq->fOdbEqSettings->WU32AI("DateAdded",(int)fVariables.size(), lvbank->GetFirstUnixTimestamp());
       
       //Push into list of monitored variables
-      fVariables.push_back(new HistoryVariable(lvbank));
+      fVariables.push_back(new HistoryVariable(lvbank,fMfe));
 
       //Announce in control room new variable is logging
       char message[100];
@@ -213,19 +269,21 @@ public:
       } else if (strncmp(ThisBank->NAME.DATATYPE,"FLT",3)==0) {
          LVBANK<float>* bank=(LVBANK<float>*)buf;
          logger.Update(bank);
-      } else if (strncmp(ThisBank->NAME.DATATYPE,"I64",3)==0) {
+      //Not supported by ODB
+      /*} else if (strncmp(ThisBank->NAME.DATATYPE,"I64",3)==0) {
          LVBANK<int64_t>* bank=(LVBANK<int64_t>*)buf;
          logger.Update(bank);
       } else if (strncmp(ThisBank->NAME.DATATYPE,"U64",3)==0) {
          LVBANK<uint64_t>* bank=(LVBANK<uint64_t>*)buf;
-         logger.Update(bank);
+         logger.Update(bank);*/
       } else if (strncmp(ThisBank->NAME.DATATYPE,"I32",3)==0) {
          LVBANK<int32_t>* bank=(LVBANK<int32_t>*)buf;
          logger.Update(bank);
       } else if (strncmp(ThisBank->NAME.DATATYPE,"U32",3)==0) {
-         LVBANK<uint32_t>* bank=(LVBANK<uint32_t>*)buf;
+         LVBANK<int32_t>* bank=(LVBANK<int32_t>*)buf;
          logger.Update(bank);
-      } else if (strncmp(ThisBank->NAME.DATATYPE,"I16",3)==0) {
+      //Not supported by ODB
+      /*} else if (strncmp(ThisBank->NAME.DATATYPE,"I16",3)==0) {
          LVBANK<int16_t>* bank=(LVBANK<int16_t>*)buf;
          logger.Update(bank);
       } else if (strncmp(ThisBank->NAME.DATATYPE,"U16",3)==0) {
@@ -236,7 +294,7 @@ public:
          logger.Update(bank);
       } else if (strncmp(ThisBank->NAME.DATATYPE,"U8",2)==0) {
          LVBANK<uint8_t>* bank=(LVBANK<uint8_t>*)buf;
-         logger.Update(bank);
+         logger.Update(bank);*/
       } else if (strncmp(ThisBank->NAME.DATATYPE,"CHAR",4)==0) {
          LVBANK<char>* bank=(LVBANK<char>*)buf;
          logger.Update(bank);
@@ -302,7 +360,7 @@ public:
       char* ptr = (char*) fEq->BkOpen(fEventBuf, "LVD1", TID_STRUCT);
       
       int read_status=zmq_recv (responder, ptr, fEventSize, ZMQ_NOBLOCK);
-      //No data to read... does quitting cause a memory leak?
+      //No data to read... does quitting cause a memory leak? It seems not (tested with valgrind)
       if (read_status<0)
          return;
       int BankSize=0;
