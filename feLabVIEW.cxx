@@ -302,8 +302,9 @@ public:
       char* ptr = (char*) fEq->BkOpen(fEventBuf, "LVD1", TID_STRUCT);
       
       int read_status=zmq_recv (responder, ptr, fEventSize, ZMQ_NOBLOCK);
-      //No data to read... does quitting case a memory leak?
-      if (read_status<0) return;
+      //No data to read... does quitting cause a memory leak?
+      if (read_status<0)
+         return;
       int BankSize=0;
 
       const char* error;
