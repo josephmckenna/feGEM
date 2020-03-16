@@ -30,12 +30,16 @@ struct LVDATA {
    void print(uint32_t size)
    {
       std::cout<<"   Coarse Time:"<<CoarseTime<<std::endl;
-      std::cout<<"   Unix Time:"<<CoarseTime-2082844800<<std::endl;;
+      std::cout<<"   Unix Time:"<<GetUnixTimestamp()<<std::endl;;
       std::cout<<"   Fine Time:"<<FineTime<<std::endl;
       uint32_t data_points=GetEntries(size);
       std::cout<<"   size:"<<data_points<<std::endl;
       for (int i=0; i<data_points; i++)
          std::cout<<"   DATA["<<i<<"]="<<DATA[i]<<std::endl;
+   }
+   const int64_t GetUnixTimestamp() const 
+   {
+      return CoarseTime-2082844800;
    }
 };
 
@@ -87,9 +91,25 @@ struct LVBANK {
              + sizeof(BlockSize)
              + sizeof(NumberOfEntries);
    }
-   uint64_t GetSize()
+   uint64_t GetTotalSize()
    {
       return GetHeaderSize()+BlockSize*NumberOfEntries;
+   }
+   const LVDATA<T>* GetFirstDataEntry() const
+   {
+      return &DATA[0];
+   }
+   const LVDATA<T>* GetLastDataEntry() const
+   {
+      return &DATA[(NumberOfEntries-1)*BlockSize];
+   }
+   const int64_t GetFirstUnixTimestamp() const 
+   {
+      return GetFirstDataEntry()->GetUnixTimestamp();
+   }
+   const int64_t GetLastUnixTimestamp() const 
+   {
+      return GetLastDataEntry()->GetUnixTimestamp();
    }
 
 };
@@ -104,6 +124,12 @@ struct LVBANKARRAY {
    uint32_t GetHeaderSize()
    {
       return sizeof(BANK)+sizeof(PAD)+sizeof(BlockSize)+sizeof(NumberOfEntries);
+   }
+   uint32_t GetTotalSize()
+   {
+      std::cout<<"Header size:"<<GetHeaderSize()<<std::endl;
+      std::cout<<"Block size: "<<BlockSize<<std::endl;
+      return GetHeaderSize()+BlockSize;
    }
    void print()
    {

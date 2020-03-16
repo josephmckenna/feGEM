@@ -44,16 +44,10 @@ class HistoryVariable
    template<typename T>
    void Update(const LVBANK<T>* lvbank)
    {
-      //If the data is from less that 'UpdateFrequency' ago
-      uint32_t data_block_size=lvbank->BlockSize;
-      uint32_t entries=lvbank->NumberOfEntries;
-      uint32_t data_size=data_block_size/entries;
-      
-      const LVDATA<T>* LatestData=&lvbank->DATA[(entries-1)*data_size];
-      
-      if (LatestData->CoarseTime < fLastUpdate + UpdateFrequency)
+      const LVDATA<T>* data=lvbank->GetLastDataEntry();
+      if (data->GetUnixTimestamp() < fLastUpdate + UpdateFrequency)
          return;
-      fLastUpdate=LatestData->CoarseTime;
+      fLastUpdate=data->GetUnixTimestamp();
 
       std::cout<<"NOT UPDATING ODB!!!WIP"<<std::endl;
    }
@@ -62,18 +56,36 @@ class HistoryVariable
 class HistoryLogger
 {
 public:
-   MVOdb* link;
+   TMFE* fMfe;
+   TMFeEquipment* fEq;
    std::vector<HistoryVariable*> fVariables;
-   HistoryLogger()
+   HistoryLogger(TMFE* mfe,TMFeEquipment* eq)
    {
+      fEq=eq;
+      fMfe=mfe;
    }
    template<typename T>
    HistoryVariable* AddNewVariable(const LVBANK<T>* lvbank)
    {
+      //Assert that category and var name are null terminated
+      assert(lvbank->NAME.VARCATEGORY[15]==0);
+      assert(lvbank->NAME.VARNAME[15]==0);
+      
+      //Store list of logged variables in Equipment settings
+      char VarAndCategory[32];
+      sprintf(VarAndCategory,"%s/%s",lvbank->NAME.VARCATEGORY,lvbank->NAME.VARNAME);
+      fEq->fOdbEqSettings->WSAI("feVariables",fVariables.size(), VarAndCategory);
+      fEq->fOdbEqSettings->WU32AI("DateAdded",(int)fVariables.size(), lvbank->GetFirstUnixTimestamp());
+      
+      //Push into list of monitored variables
       fVariables.push_back(new HistoryVariable(lvbank));
-      //Add entry to ODB of what var we are loggoing
-      //ODB write (feLabVIEW/host/category/varname)
-      std::cout<<"NOT LOGGING WHAT VAR IS LOGGING TO ODB BECAUSE WIP!"<<std::endl;
+
+      //Announce in control room new variable is logging
+      char message[100];
+      sprintf(message,"New variable %s in category %s being logged",lvbank->NAME.VARNAME,lvbank->NAME.VARCATEGORY);
+      fMfe->Msg(MTALK, "feLabVIEW", message);
+
+      //Return pointer to this variable so the history can be updated by caller function
       return fVariables.back();
    }
    template<typename T>
@@ -125,7 +137,7 @@ public:
 
    HistoryLogger logger;
 
-   Myfe(TMFE* mfe, TMFeEquipment* eq) // ctor
+   Myfe(TMFE* mfe, TMFeEquipment* eq):logger(mfe,eq) // ctor
    {
       fMfe = mfe;
       fEq  = eq;
@@ -149,6 +161,8 @@ public:
    void Init()
    {
       fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
+      fEq->fOdbEqSettings->WS("feVariables","No variables logged yet...",32);
+      fEq->fOdbEqSettings->WU32("DateAdded",0);
       if (fEventBuf) {
          free(fEventBuf);
       }
@@ -157,7 +171,6 @@ public:
       sprintf(bind_port,"tcp://*:%d",port);
       std::cout<<"Binding to: "<<bind_port<<std::endl;
       int rc=zmq_bind (responder, bind_port);
-      //int rc = zmq_bind (responder, "tcp://*:5555");
       assert (rc==0);
    }
 
@@ -235,10 +248,10 @@ public:
       return;
    }
 
-   const char* HandleBankArray()
+   const char* HandleBankArray(char * ptr)
    {
-      LVBANKARRAY* array=(LVBANKARRAY*)fEventBuf;
-      if (array->BlockSize + array->GetHeaderSize() > (uint32_t)fEventSize)
+      LVBANKARRAY* array=(LVBANKARRAY*)ptr;
+      if (array->GetTotalSize() > (uint32_t)fEventSize)
       {
          char error[100];
          sprintf(error,"ERROR: More bytes sent (%u) than MIDAS has assiged for buffer (%u)",array->BlockSize+ array->GetHeaderSize(),fEventSize);
@@ -254,23 +267,22 @@ public:
       }
       return NULL;
    }
-   const char* HandleBank()
+   const char* HandleBank(char * ptr)
    {
       //Use invalid data type to probe the header
-      LVBANK<void*>* ThisBank=(LVBANK<void*>*)fEventBuf;
+      LVBANK<void*>* ThisBank=(LVBANK<void*>*)ptr;
       if (ThisBank->BlockSize+ThisBank->GetHeaderSize() > (uint32_t)fEventSize)
       {
          char error[100];
          sprintf(error,"ERROR: More bytes sent (%u) than MIDAS has assiged for buffer (%u)",ThisBank->BlockSize+ThisBank->GetHeaderSize(),fEventSize);
          return error;
       }
-      LogBank(fEventBuf);
+      LogBank(ptr);
       return NULL;
    }
    void AnnounceError(const char* error)
    {
-      fMfe->Msg(MTALK, "HandleEndRun", "End run!");
-      std::cout<<"IMPLEMENT SPEAK OF:"<<error<<std::endl;
+      fMfe->Msg(MTALK, "feLabVIEW", error);
    }
    void HandlePeriodic()
    {
@@ -281,17 +293,31 @@ public:
       //fEq->WriteStatistics();
       
       //char buffer [10];
-      int read_status=zmq_recv (responder, fEventBuf, fEventSize, ZMQ_NOBLOCK);
+
+      fEq->ComposeEvent(fEventBuf, fEventSize);
+      fEq->BkInit(fEventBuf, fEventSize);
+      // ZeroMQ directly puts the data inside the data bank (aimed minimise copy operations)
+      // there for we must define the MIDAS Bankname now, not after we know if its a LabVIEW
+      // bank or LabVIEW Array LVB1 or LVA1
+      char* ptr = (char*) fEq->BkOpen(fEventBuf, "LVD1", TID_STRUCT);
+      
+      int read_status=zmq_recv (responder, ptr, fEventSize, ZMQ_NOBLOCK);
+      //No data to read... does quitting case a memory leak?
       if (read_status<0) return;
+      int BankSize=0;
 
       const char* error;
-      printf ("Received (%c%c%c%c)\n",fEventBuf[0],fEventBuf[1],fEventBuf[2],fEventBuf[3]);
-      if (strncmp(fEventBuf,"PYA1",4)==0) {
-         std::cout<<"Python Bank Array found!"<<std::endl;
-         error=HandleBankArray();
-      } else if (strncmp(fEventBuf,"PYB1",4)==0) {
-         std::cout<<"Python Bank found!"<<std::endl;
-         error=HandleBank();
+      printf ("Received (%c%c%c%c)\n",ptr[0],ptr[1],ptr[2],ptr[3]);
+      if (strncmp(ptr,"PYA1",4)==0 || strncmp(ptr,"LVA1",4)==0) {
+         std::cout<<"Python / LabVIEW Bank Array found!"<<std::endl;
+         LVBANKARRAY* bank=(LVBANKARRAY*)ptr;
+         BankSize=bank->GetTotalSize();
+         error=HandleBankArray(ptr);
+      } else if (strncmp(ptr,"PYB1",4)==0 || strncmp(ptr,"LVB1",4)==0 ) {
+         std::cout<<"Python / LabVIEW Bank found!"<<std::endl;
+         LVBANK<void*>* bank=(LVBANK<void*>*)ptr;
+         BankSize=bank->GetTotalSize();
+         error=HandleBank(ptr);
       } else {
          std::cout<<"Unknown data type just received... "<<std::endl;
          exit(1);
@@ -300,14 +326,14 @@ public:
       {
          zmq_send (responder, error, strlen(error), 0);
          AnnounceError(error);
-         std::cout<<"ANNOUCE ERROR!"<<std::endl;
          exit(1);
       }
       else
       {
          zmq_send (responder, "DATA OK", 7, 0);
       }
-      //Event finished... sanitise 
+      fEq->BkClose(fEventBuf, ptr+BankSize);
+      fEq->SendEvent(fEventBuf);
       return;
    }
 };
