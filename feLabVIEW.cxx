@@ -17,6 +17,7 @@
 #include <zmq.h>
 #include "feLabVIEW.h"
 
+#include <chrono>
 class HistoryVariable
 {
    public:
@@ -345,6 +346,7 @@ public:
    void HandlePeriodic()
    {
       printf("periodic!\n");
+      std::chrono::time_point<std::chrono::system_clock> timer_start=std::chrono::high_resolution_clock::now();
       //char buf[256];
       //sprintf(buf, "buffered %d (max %d), dropped %d, unknown %d, max flushed %d", gUdpPacketBufSize, fMaxBuffered, fCountDroppedPackets, fCountUnknownPackets, fMaxFlushed);
       //fEq->SetStatus(buf, "#00FF00");
@@ -358,7 +360,7 @@ public:
       // there for we must define the MIDAS Bankname now, not after we know if its a LabVIEW
       // bank or LabVIEW Array LVB1 or LVA1
       char* ptr = (char*) fEq->BkOpen(fEventBuf, "LVD1", TID_STRUCT);
-      
+
       int read_status=zmq_recv (responder, ptr, fEventSize, ZMQ_NOBLOCK);
       //No data to read... does quitting cause a memory leak? It seems not (tested with valgrind)
       if (read_status<0)
@@ -381,6 +383,11 @@ public:
          std::cout<<"Unknown data type just received... "<<std::endl;
          exit(1);
       }
+      fEq->BkClose(fEventBuf, ptr+BankSize);
+      fEq->SendEvent(fEventBuf);
+      std::chrono::time_point<std::chrono::system_clock> timer_stop=std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double> handlingtime=timer_stop - timer_start;
+      std::cout<<"Handling time: "<<handlingtime.count()<<std::endl;
       if (error)
       {
          zmq_send (responder, error, strlen(error), 0);
@@ -389,10 +396,10 @@ public:
       }
       else
       {
-         zmq_send (responder, "DATA OK", 7, 0);
+         char message[100];
+         sprintf(message,"DATA OK (Processed in %fms)",1000*handlingtime.count());
+         zmq_send (responder, message, strlen(message), 0);
       }
-      fEq->BkClose(fEventBuf, ptr+BankSize);
-      fEq->SendEvent(fEventBuf);
       return;
    }
 };
