@@ -17,6 +17,8 @@
 #include <zmq.h>
 #include "feLabVIEW.h"
 
+#include "msystem.h"
+
 #include <chrono>
 class HistoryVariable
 {
@@ -174,7 +176,7 @@ public:
 };
 
 
-class Myfe :
+class feLabVIEWSupervisor :
    public TMFeRpcHandlerInterface,
    public  TMFePeriodicHandlerInterface
 {
@@ -187,14 +189,17 @@ public:
    void *context;
    void *responder;
 
-   int port;
+   int fPort;
 
    int fEventSize;
    char* fEventBuf;
 
-   HistoryLogger logger;
+   MVOdb* fOdbWorkers; 
+  
+   int fPortRangeStart;
+   int fPortRangeStop;
 
-   Myfe(TMFE* mfe, TMFeEquipment* eq):logger(mfe,eq) // ctor
+   feLabVIEWSupervisor(TMFE* mfe, TMFeEquipment* eq) // ctor
    {
       fMfe = mfe;
       fEq  = eq;
@@ -202,12 +207,16 @@ public:
       fEventSize = 10000;
       fEventBuf  = NULL;
 
+      //So far... limit to 1000 frontend workers...
+      fPortRangeStart = 13000;
+      fPortRangeStop  = 13999;
+
       context = zmq_ctx_new ();
       responder = zmq_socket (context, ZMQ_REP);
-      port=5555;
+      fPort=5555;
    }
 
-   ~Myfe() // dtor
+   ~feLabVIEWSupervisor() // dtor
    {
       if (fEventBuf) {
          free(fEventBuf);
@@ -217,30 +226,25 @@ public:
 
    void Init()
    {
+
       fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
-      fEq->fOdbEqSettings->WS("feVariables","No variables logged yet...",32);
-      fEq->fOdbEqSettings->WU32("DateAdded",0);
+      fEq->fOdbEqSettings->RI("port_range_start",&fPortRangeStart, true);
+      fEq->fOdbEqSettings->RI("port_range_stop",&fPortRangeStop, true);
+      assert(fPort>0);
+      fOdbWorkers=fEq->fOdbEqSettings->Chdir("WorkerList",true);
+      fOdbWorkers->WU32("HostName",0);
+      fOdbWorkers->WU32("DateAdded",0);
+      fOdbWorkers->WU32("Port",0);
+
       if (fEventBuf) {
          free(fEventBuf);
       }
       fEventBuf = (char*)malloc(fEventSize);
       char bind_port[100];
-      sprintf(bind_port,"tcp://*:%d",port);
+      sprintf(bind_port,"tcp://*:%d",fPort);
       std::cout<<"Binding to: "<<bind_port<<std::endl;
       int rc=zmq_bind (responder, bind_port);
       assert (rc==0);
-   }
-
-   void SendEvent(double dvalue)
-   {
-      fEq->ComposeEvent(fEventBuf, fEventSize);
-      fEq->BkInit(fEventBuf, fEventSize);
-
-      double* ptr = (double*)fEq->BkOpen(fEventBuf, "test", TID_DOUBLE);
-      *ptr = dvalue;
-      fEq->BkClose(fEventBuf, ptr+1);
-
-      fEq->SendEvent(fEventBuf);
    }
 
    std::string HandleRpc(const char* cmd, const char* args)
@@ -259,6 +263,178 @@ public:
    {
       fMfe->Msg(MINFO, "HandleEndRun", "End run!");
       fEq->SetStatus("Stopped", "#00FF00");
+   }
+   char* AddNewClient(const char* hostname)
+   {
+      std::cout<<"Check list of workers"<<std::endl;
+      std::cout<<"Assign port"<<std::endl;
+      char command[100];
+      std::cout<<"FIX PORT ASSIGNEDMENT FIXME"<<std::endl;
+      sprintf(command,"./feLabVIEW.exe --client %s --port %u > test.log",hostname,fPort+1);
+      std::cout<<"Running command:" << command<<std::endl;
+      ss_system(command);
+      return "New Frontend started";
+      return "Frontend already running";
+   }
+   void HandlePeriodic()
+   {
+      printf("periodic!\n");
+      std::chrono::time_point<std::chrono::system_clock> timer_start=std::chrono::high_resolution_clock::now();
+      
+      int read_status=zmq_recv (responder, fEventBuf, fEventSize, ZMQ_NOBLOCK);
+      
+      std::cout<<"READ STATUS:"<<read_status<<std::endl;
+      //No data to read... does quitting cause a memory leak? It seems not (tested with valgrind)
+      if (read_status<0)
+         return;
+      //We use this as a char array... add terminating character at end of read
+      fEventBuf[read_status]=0;
+      std::cout<<fEventBuf<<std::endl;
+      const char* error;
+      printf ("Supervisor received (%c%c%c%c)\n",fEventBuf[0],fEventBuf[1],fEventBuf[2],fEventBuf[3]);
+      if (strncmp(fEventBuf,"START_FRONTEND",14)==0)
+      {
+         char hostname[100];
+         sprintf(hostname,"%s",&fEventBuf[19]);
+         std::cout<<hostname<<std::endl;
+         for (int i=0; i<100; i++)
+         {
+            if (hostname[i]=='.')
+            {
+               hostname[i]=0;
+               break;
+            }
+         }
+         const char* response=AddNewClient(hostname);
+         zmq_send (responder, response, strlen(response), 0);
+         return;
+      } else if (strncmp(fEventBuf,"GIVE_ME_ADDRESS",15)==0) {
+         char hostname[100];
+         sprintf(hostname,"%s",&fEventBuf[19]);
+         std::cout<<hostname<<std::endl;
+         for (int i=0; i<100; i++)
+         {
+            if (hostname[i]=='.')
+            {
+               hostname[i]=0;
+               break;
+            }
+         }
+         char log_to_address[100];
+         //sprintf(log_to_address,"%s","tcp://127.0.0.1:5556");
+         sprintf(log_to_address,"%s","tcp://localhost:5556");
+         std::cout<<"FIXME:"<<log_to_address<<std::endl;
+         zmq_send (responder, log_to_address, strlen(log_to_address), 0);
+         return;
+      } else {
+         std::cout<<"Unknown data type just received... "<<std::endl;
+         exit(1);
+      }
+/*      std::chrono::time_point<std::chrono::system_clock> timer_stop=std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double> handlingtime=timer_stop - timer_start;
+      std::cout<<"Handling time: "<<handlingtime.count()<<std::endl;
+      if (error)
+      {
+         zmq_send (responder, error, strlen(error), 0);
+         fMfe->Msg(MTALK, "feLabVIEW", error);
+         exit(1);
+      }
+      else
+      {
+         char message[100];
+         sprintf(message,"DATA OK (Processed in %fms)",1000*handlingtime.count());
+         zmq_send (responder, message, strlen(message), 0);
+      }*/
+      return;
+   }
+};
+
+enum RunStatusType{Unknown,Running,Stopped};
+
+class feLabVIEWWorker :
+   public TMFeRpcHandlerInterface,
+   public  TMFePeriodicHandlerInterface
+{
+public:
+   TMFE* fMfe;
+   TMFeEquipment* fEq;
+   
+   //ZeroMQ stuff
+   
+   void *context;
+   void *responder;
+
+   int fPort;
+
+   int fEventSize;
+   char* fEventBuf;
+
+   
+   RunStatusType RunStatus;
+   int RUNNO;
+
+   HistoryLogger logger;
+
+   feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq):logger(mfe,eq) // ctor
+   {
+      fMfe = mfe;
+      fEq  = eq;
+      //Default event size ok 10kb, will be overwritten by ODB entry in Init()
+      fEventSize = 10000;
+      fEventBuf  = NULL;
+
+      context = zmq_ctx_new ();
+      responder = zmq_socket (context, ZMQ_REP);
+
+      RunStatus=Unknown;
+      RUNNO=-1;
+   }
+
+   ~feLabVIEWWorker() // dtor
+   {
+      if (fEventBuf) {
+         free(fEventBuf);
+         fEventBuf = NULL;
+      }
+   }
+
+   void Init()
+   {
+      fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
+      fEq->fOdbEqSettings->WS("feVariables","No variables logged yet...",32);
+      fEq->fOdbEqSettings->WU32("DateAdded",0);
+      assert(fPort>0);
+      if (fEventBuf) {
+         free(fEventBuf);
+      }
+      fEventBuf = (char*)malloc(fEventSize);
+      char bind_port[100];
+      sprintf(bind_port,"tcp://*:%d",fPort);
+      std::cout<<"Binding to: "<<bind_port<<std::endl;
+      int rc=zmq_bind (responder, bind_port);
+      assert (rc==0);
+   }
+
+   std::string HandleRpc(const char* cmd, const char* args)
+   {
+      fMfe->Msg(MINFO, "HandleRpc", "RPC cmd [%s], args [%s]", cmd, args);
+      return "OK";
+   }
+
+   void HandleBeginRun()
+   {
+      fMfe->Msg(MINFO, "HandleBeginRun", "Begin run!");
+      fMfe->fOdbRoot->RI("Runinfo/Run number", &RUNNO);
+      fEq->SetStatus("Running", "#00FF00");
+      RunStatus=Running;
+   }
+
+   void HandleEndRun()
+   {
+      fMfe->Msg(MINFO, "HandleEndRun", "End run!");
+      fMfe->fOdbRoot->RI("Runinfo/Run number", &RUNNO);
+      fEq->SetStatus("Stopped", "#00FF00");
+      RunStatus=Stopped;
    }
    void LogBank(const char* buf)
    {
@@ -339,10 +515,7 @@ public:
       LogBank(ptr);
       return NULL;
    }
-   void AnnounceError(const char* error)
-   {
-      fMfe->Msg(MTALK, "feLabVIEW", error);
-   }
+
    void HandlePeriodic()
    {
       printf("periodic!\n");
@@ -367,7 +540,7 @@ public:
          return;
       int BankSize=0;
 
-      const char* error;
+      const char* error=NULL;
       printf ("Received (%c%c%c%c)\n",ptr[0],ptr[1],ptr[2],ptr[3]);
       if (strncmp(ptr,"PYA1",4)==0 || strncmp(ptr,"LVA1",4)==0) {
          std::cout<<"Python / LabVIEW Bank Array found!"<<std::endl;
@@ -379,8 +552,27 @@ public:
          LVBANK<void*>* bank=(LVBANK<void*>*)ptr;
          BankSize=bank->GetTotalSize();
          error=HandleBank(ptr);
+      } else if (strncmp(ptr,"RUN_STATUS",10)==10) {
+         switch (RunStatus)
+         {
+            case Unknown:
+               zmq_send (responder, "UNKNOWN", 7, 0);
+               return;
+            case Running:
+               zmq_send (responder, "RUNNING", 7, 0);
+               return;
+            case Stopped:
+               zmq_send (responder, "STOPPED", 7, 0);
+               return;
+         }
+      } else if (strncmp(ptr,"RUN_NUMBER",10)==10) {
+         char message[32]={0};
+         sprintf(message,"RUNNO:%u",RUNNO);
+         zmq_send (responder, message, strlen(message), 0);
+         return;
       } else {
          std::cout<<"Unknown data type just received... "<<std::endl;
+         error="Unknown data type just received... ";
          exit(1);
       }
       fEq->BkClose(fEventBuf, ptr+BankSize);
@@ -391,7 +583,7 @@ public:
       if (error)
       {
          zmq_send (responder, error, strlen(error), 0);
-         AnnounceError(error);
+         fMfe->Msg(MTALK, "feLabVIEW", error);
          exit(1);
       }
       else
@@ -428,6 +620,7 @@ int main(int argc, char* argv[])
 
    bool SupervisorMode=false;
    std::string client="NULL";
+   int port          =5555;
    int max_event_size=0;
    // loop over the commandline options
    for (unsigned int i=1; i<args.size(); i++) 
@@ -436,10 +629,12 @@ int main(int argc, char* argv[])
       //printf("argv[%d] is %s\n",i,arg);
 
       if (strncmp(arg,"--supervisor",12)==0) {
-         std::cout<<"Supervisor mode not set up"<<std::endl;
+         std::cout<<"Starting in supervisor mode"<<std::endl;
          SupervisorMode=true;
       } else if (strncmp(arg,"--client",8)==0) {
          client = args[++i];
+      } else if (strncmp(arg,"--port",8)==0) {
+         port = atoi(args[++i].c_str());
       } else if (strncmp(arg,"--max_event_size",16)==0) {
          max_event_size= atoi(args[++i].c_str()); 
       } else {
@@ -455,7 +650,7 @@ int main(int argc, char* argv[])
    }
    std::string name = "feLabVIEW_";
    if (SupervisorMode)
-      name+="Supervisor";
+      name+="supervisor";
    else
       name+=client.c_str();
 
@@ -487,18 +682,26 @@ int main(int argc, char* argv[])
 
    mfe->RegisterEquipment(eq);
 
-   Myfe* myfe = new Myfe(mfe,eq);
-   myfe->fEventSize=max_event_size;
-   mfe->RegisterRpcHandler(myfe);
-
+   if (SupervisorMode)
+   {
+      feLabVIEWSupervisor* myfe= new feLabVIEWSupervisor(mfe,eq);
+      myfe->fPort=port;
+      mfe->RegisterRpcHandler(myfe);
+      myfe->Init();
+      mfe->RegisterPeriodicHandler(eq, myfe);
+   }
+   else
+   {
+      feLabVIEWWorker* myfe = new feLabVIEWWorker(mfe,eq);
+      myfe->fPort=port;
+      mfe->RegisterRpcHandler(myfe);
+      myfe->Init();
+      mfe->RegisterPeriodicHandler(eq, myfe);
+   }
    //mfe->SetTransitionSequenceStart(910);
    //mfe->SetTransitionSequenceStop(90);
    //mfe->DeregisterTransitionPause();
    //mfe->DeregisterTransitionResume();
-
-   myfe->Init();
-
-   mfe->RegisterPeriodicHandler(eq, myfe);
 
    eq->SetStatus("Started...", "white");
 
