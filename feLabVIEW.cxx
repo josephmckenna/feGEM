@@ -31,8 +31,8 @@ class HistoryVariable
    template<typename T>
    HistoryVariable(const LVBANK<T>* lvbank, TMFE* mfe )
    {
-      fCategory=lvbank->NAME.VARCATEGORY;
-      fVarName=lvbank->NAME.VARNAME;
+      fCategory=lvbank->GetCategoryName();
+      fVarName=lvbank->GetVarName();
       UpdateFrequency=lvbank->HistoryRate;
       fLastUpdate=0;
 
@@ -43,9 +43,9 @@ class HistoryVariable
    template<typename T>
    bool IsMatch(const LVBANK<T>* lvbank)
    {
-      if (strcmp(fCategory.c_str(),lvbank->NAME.VARCATEGORY)!=0)
+      if (strcmp(fCategory.c_str(),lvbank->GetCategoryName().c_str())!=0)
          return false;
-      if (strcmp(fVarName.c_str(),lvbank->NAME.VARNAME)!=0)
+      if (strcmp(fVarName.c_str(),lvbank->GetVarName().c_str())!=0)
          return false;
       return true;
    }
@@ -127,12 +127,14 @@ public:
    HistoryVariable* AddNewVariable(const LVBANK<T>* lvbank)
    {
       //Assert that category and var name are null terminated
-      assert(lvbank->NAME.VARCATEGORY[15]==0);
-      assert(lvbank->NAME.VARNAME[15]==0);
+      //assert(lvbank->NAME.VARCATEGORY[15]==0);
+      //assert(lvbank->NAME.VARNAME[15]==0);
       
       //Store list of logged variables in Equipment settings
       char VarAndCategory[32];
-      sprintf(VarAndCategory,"%s/%s",lvbank->NAME.VARCATEGORY,lvbank->NAME.VARNAME);
+      sprintf(VarAndCategory,"%s/%s",
+                       lvbank->GetCategoryName().c_str(),
+                       lvbank->GetVarName().c_str());
       fEq->fOdbEqSettings->WSAI("feVariables",fVariables.size(), VarAndCategory);
       fEq->fOdbEqSettings->WU32AI("DateAdded",(int)fVariables.size(), lvbank->GetFirstUnixTimestamp());
       
@@ -141,7 +143,7 @@ public:
 
       //Announce in control room new variable is logging
       char message[100];
-      sprintf(message,"New variable %s in category %s being logged",lvbank->NAME.VARNAME,lvbank->NAME.VARCATEGORY);
+      sprintf(message,"New variable [%s] in category [%s] being logged",lvbank->GetVarName().c_str(),lvbank->GetCategoryName().c_str());
       fMfe->Msg(MTALK, "feLabVIEW", message);
 
       //Return pointer to this variable so the history can be updated by caller function
@@ -283,7 +285,6 @@ public:
       
       int read_status=zmq_recv (responder, fEventBuf, fEventSize, ZMQ_NOBLOCK);
       
-      std::cout<<"READ STATUS:"<<read_status<<std::endl;
       //No data to read... does quitting cause a memory leak? It seems not (tested with valgrind)
       if (read_status<0)
          return;
@@ -296,7 +297,7 @@ public:
       {
          char hostname[100];
          sprintf(hostname,"%s",&fEventBuf[19]);
-         std::cout<<hostname<<std::endl;
+         //Trim the hostname at the first '.'
          for (int i=0; i<100; i++)
          {
             if (hostname[i]=='.')
@@ -322,12 +323,14 @@ public:
          }
          char log_to_address[100];
          //sprintf(log_to_address,"%s","tcp://127.0.0.1:5556");
-         sprintf(log_to_address,"%s","tcp://localhost:5556");
+         sprintf(log_to_address,"%s","tcp://alphamidastest8:5556");
          std::cout<<"FIXME:"<<log_to_address<<std::endl;
          zmq_send (responder, log_to_address, strlen(log_to_address), 0);
          return;
       } else {
-         std::cout<<"Unknown data type just received... "<<std::endl;
+         std::cout<<"Unknown message just received: "<<std::endl;
+         for (int i=0;i<50; i++)
+            std::cout<<fEventBuf[i];
          exit(1);
       }
 /*      std::chrono::time_point<std::chrono::system_clock> timer_stop=std::chrono::high_resolution_clock::now();
@@ -456,8 +459,9 @@ public:
       } else if (strncmp(ThisBank->NAME.DATATYPE,"I32",3)==0) {
          LVBANK<int32_t>* bank=(LVBANK<int32_t>*)buf;
          logger.Update(bank);
-      } else if (strncmp(ThisBank->NAME.DATATYPE,"U32",3)==0) {
+      } else if (strncmp(ThisBank->NAME.DATATYPE,"UI32",4)==0) {
          LVBANK<int32_t>* bank=(LVBANK<int32_t>*)buf;
+         //bank->print();
          logger.Update(bank);
       //Not supported by ODB
       /*} else if (strncmp(ThisBank->NAME.DATATYPE,"I16",3)==0) {
@@ -472,8 +476,12 @@ public:
       } else if (strncmp(ThisBank->NAME.DATATYPE,"U8",2)==0) {
          LVBANK<uint8_t>* bank=(LVBANK<uint8_t>*)buf;
          logger.Update(bank);*/
-      } else if (strncmp(ThisBank->NAME.DATATYPE,"CHAR",4)==0) {
+      } else if (strncmp(ThisBank->NAME.DATATYPE,"STR",3)==0) {
          LVBANK<char>* bank=(LVBANK<char>*)buf;
+         if (strncmp(bank->NAME.VARNAME,"TALK",4)==0)
+         {
+            fMfe->Msg(MTALK, "feLabVIEW", (char*)bank->DATA);
+         }
          logger.Update(bank);
       } else {
          std::cout<<"Unknown bank data type... "<<std::endl;
@@ -489,10 +497,12 @@ public:
       if (array->GetTotalSize() > (uint32_t)fEventSize)
       {
          char error[100];
-         sprintf(error,"ERROR: More bytes sent (%u) than MIDAS has assiged for buffer (%u)",array->BlockSize+ array->GetHeaderSize(),fEventSize);
+         sprintf(error,"ERROR: More bytes sent (%u) than MIDAS has assiged for buffer (%u)",
+                        array->BlockSize + array->GetHeaderSize(),
+                        fEventSize);
          return error;
       }
-      array->print();
+      //array->print();
       char *buf=(char*)&array->DATA[0];
       for (uint32_t i=0; i<array->NumberOfEntries; i++)
       {
@@ -506,10 +516,13 @@ public:
    {
       //Use invalid data type to probe the header
       LVBANK<void*>* ThisBank=(LVBANK<void*>*)ptr;
+      //ThisBank->print();
       if (ThisBank->BlockSize+ThisBank->GetHeaderSize() > (uint32_t)fEventSize)
       {
          char error[100];
-         sprintf(error,"ERROR: More bytes sent (%u) than MIDAS has assiged for buffer (%u)",ThisBank->BlockSize+ThisBank->GetHeaderSize(),fEventSize);
+         sprintf(error,"ERROR: More bytes sent (%u) than MIDAS has assiged for buffer (%u)",
+                        ThisBank->BlockSize + ThisBank->GetHeaderSize(),
+                        fEventSize);
          return error;
       }
       LogBank(ptr);
@@ -573,6 +586,8 @@ public:
       } else {
          std::cout<<"Unknown data type just received... "<<std::endl;
          error="Unknown data type just received... ";
+         for (int i=0; i<20; i++)
+            std::cout<<ptr[i];
          exit(1);
       }
       fEq->BkClose(fEventBuf, ptr+BankSize);
@@ -641,21 +656,26 @@ int main(int argc, char* argv[])
          usage();
       }
 
-      
    }
    if (!SupervisorMode && strcmp(client.c_str(),"NULL")==0)
    {
       std::cout<<"No client named to connect to..."<<std::endl;
       usage();
    }
-   std::string name = "feLabVIEW_";
+   std::string name = "fe";
    if (SupervisorMode)
-      name+="supervisor";
+      name+="LabVIEW_supervisor";
    else
+   {
+      name+="LV_";
       name+=client.c_str();
+   }
 
    TMFE* mfe = TMFE::Instance();
-
+   if (name.size()>31)
+   {
+      mfe->Msg(MERROR, "feLabVIEW", "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
+   }
    TMFeError err = mfe->Connect(name.c_str(), __FILE__);
    if (err.error) {
       printf("Cannot connect, bye.\n");

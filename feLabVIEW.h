@@ -9,10 +9,48 @@
 #include <cstring>
 #include <fstream>
 
+template <class T>
+T change_endian(T in)
+{
+    char* const p = reinterpret_cast<char*>(&in);
+    for (size_t i = 0; i < sizeof(T) / 2; ++i)
+        std::swap(p[i], p[sizeof(T) - i - 1]);
+    return in;
+}
+
+std::string sanitiseString(const char* input, int assert_size=0)
+{
+   
+   const int input_size=strlen(input);
+   int output_size=input_size;
+   if (assert_size)
+      output_size=assert_size;
+   std::string output;
+   output.resize(output_size);
+   
+   int i,j;
+   for (i = 0, j = 0; i<input_size; i++,j++)
+   {
+      if (isalnum(input[i]))
+      {
+         output[j]=input[i];
+      }
+      else
+         j--;
+      if (j>=output_size)
+         break;
+   }
+   output[j]=0;
+   if (assert_size)
+      output[assert_size]=0;
+   return output;
+}
+
 //Data as transmitted
 template<typename T>
 struct LVDATA {
    //LabVIEW formatted time... (128bit)
+   //Note! LabVIEW timestamp is Big Endian...
    //(i64) seconds since the epoch 01/01/1904 00:00:00.00 UTC (using the Gregorian calendar and ignoring leap seconds),
    int64_t CoarseTime;
    //(u64) positive fractions of a second 
@@ -27,19 +65,32 @@ struct LVDATA {
    {
       return (size-GetHeaderSize())/sizeof(T);
    }
-   void print(uint32_t size)
+   void print(uint32_t size, bool LittleEndian)
    {
-      std::cout<<"   Coarse Time:"<<CoarseTime<<std::endl;
+      std::cout<<"   Coarse Time:"<<GetLabVIEWCoarseTime()<<std::endl;
       std::cout<<"   Unix Time:"<<GetUnixTimestamp()<<std::endl;;
-      std::cout<<"   Fine Time:"<<FineTime<<std::endl;
+      std::cout<<"   Fine Time:"<<GetLabVIEWFineTime()<<std::endl;
       uint32_t data_points=GetEntries(size);
       std::cout<<"   size:"<<data_points<<std::endl;
-      for (int i=0; i<data_points; i++)
-         std::cout<<"   DATA["<<i<<"]="<<DATA[i]<<std::endl;
+      if (LittleEndian)
+         for (int i=0; i<data_points; i++)
+            std::cout<<"   DATA["<<i<<"]="<<DATA[i]<<std::endl;
+      else
+         for (int i=0; i<data_points; i++)
+            std::cout<<"   DATA["<<i<<"]="<<change_endian(DATA[i])<<std::endl;
+   }
+   //LabVIEW timestamp is Big Endian... convert when reading, store as orignal data (BigEndian)
+   const int64_t GetLabVIEWCoarseTime() const
+   {
+      return change_endian(CoarseTime);
+   }
+   const uint64_t GetLabVIEWFineTime() const
+   {
+      return change_endian(FineTime);
    }
    const int64_t GetUnixTimestamp() const 
    {
-      return CoarseTime-2082844800;
+      return change_endian(CoarseTime)-2082844800;
    }
 };
 
@@ -53,16 +104,16 @@ struct BANK_TITLE {
    {
       printf("  BANK:%.4s\n",BANK);
       printf("  DATATYPE:%.4s\n",DATATYPE);
-      printf("  Variable:%.16s/%.16s\n",VARCATEGORY,VARNAME);
+      printf("  Variable:%.16s/%.16s\n",sanitiseString(VARCATEGORY,sizeof(VARCATEGORY)).c_str(),sanitiseString(VARNAME,sizeof(VARNAME)).c_str());
    }
 };
-
+enum LVEndianess { BigEndian, NativeEndian, LittleEndian};
 template<typename T>
 struct LVBANK {
    BANK_TITLE NAME;
    char EquipmentType[32];
    uint32_t HistoryRate;
-   uint32_t other;
+   uint32_t DataEndianess;
    uint32_t BlockSize;
    uint32_t NumberOfEntries;
    LVDATA<T> DATA[];
@@ -71,23 +122,31 @@ struct LVBANK {
       NAME.print();
       std::cout<<"  EquipmentType:"<<EquipmentType<<std::endl;
       std::cout<<"  HistoryRate:"<<HistoryRate<<std::endl;
-      std::cout<<"  Other:"<<other<<std::endl;
+      std::cout<<"  DataEndianess:"<<DataEndianess<<std::endl;
       std::cout<<"  BlockSize:"<<BlockSize<<std::endl;
       std::cout<<"  NumberOfEntries:"<<NumberOfEntries<<std::endl;
       for (int i=0; i<NumberOfEntries; i++)
       {
          char* buf=(char*)&DATA;
          LVDATA<T>* data=(LVDATA<T>*)buf;
-         data->print(BlockSize);
+         data->print(BlockSize, (DataEndianess==LVEndianess::LittleEndian));
          buf+=BlockSize;
       }
+   }
+   std::string GetCategoryName() const
+   {
+      return sanitiseString(NAME.VARCATEGORY,sizeof(NAME.VARCATEGORY));
+   }
+   std::string GetVarName() const
+   {
+      return sanitiseString(NAME.VARNAME,sizeof(NAME.VARNAME));
    }
    uint64_t GetHeaderSize()
    {
       return sizeof(NAME)
              + sizeof(EquipmentType)
              + sizeof(HistoryRate)
-             + sizeof(other)
+             + sizeof(DataEndianess)
              + sizeof(BlockSize)
              + sizeof(NumberOfEntries);
    }
@@ -129,8 +188,8 @@ struct LVBANKARRAY {
    }
    uint32_t GetTotalSize()
    {
-      std::cout<<"Header size:"<<GetHeaderSize()<<std::endl;
-      std::cout<<"Block size: "<<BlockSize<<std::endl;
+      //std::cout<<"Header size:"<<GetHeaderSize()<<std::endl;
+      //std::cout<<"Block size: "<<BlockSize<<std::endl;
       return GetHeaderSize()+BlockSize;
    }
    void print()
