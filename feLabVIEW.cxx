@@ -18,7 +18,62 @@
 #include "feLabVIEW.h"
 
 #include "msystem.h"
+enum RunStatusType{Unknown,Running,Stopped};
+class MessageHandler
+{
+   
+   private:
+      TMFE* fMfe;
+      std::vector<std::string> MessageForLabVIEWQueue;
+      std::vector<std::string> ErrorForLabVIEWQueue;
+   public:
+   MessageHandler(TMFE* mfe)
+   {
+      fMfe=mfe;
+   }
+   ~MessageHandler()
+   {
+      if (MessageForLabVIEWQueue.size())
+      {
+         std::cout<<"WARNING: Messages not flushed:"<<std::endl;
+         for (auto msg: MessageForLabVIEWQueue)
+            std::cout<< msg<<std::endl;
+      }
+      if (ErrorForLabVIEWQueue.size())
+      {
+         std::cout<<"ERROR: Errors not flushed:"<<std::endl;
+         for (auto err: ErrorForLabVIEWQueue)
+            std::cout<<err<<std::endl;
+      }  
+   }
+   bool HaveErrors()
+   {
+      return ErrorForLabVIEWQueue.size();
+   }
 
+   void QueueMessage(const char* msg)
+   {
+      MessageForLabVIEWQueue.push_back(std::string("<MSG>")+msg+std::string("</MSG>"));
+   }
+   void QueueError(const char* err)
+   {
+      fMfe->Msg(MTALK, "feLabVIEW", err);
+      ErrorForLabVIEWQueue.push_back(std::string("<ERR>")+err+std::string("</ERR>"));
+   }
+   std::string ReadMessageQueue()
+   {
+      std::string msg="<MIDAS>";
+      for (auto Message: MessageForLabVIEWQueue)
+         msg+=Message;
+      MessageForLabVIEWQueue.clear();
+      for (auto Error: ErrorForLabVIEWQueue)
+         msg+=Error;
+      ErrorForLabVIEWQueue.clear();
+      msg+="</MIDAS>";
+      return msg;
+   }
+
+};
 #include <chrono>
 class HistoryVariable
 {
@@ -272,7 +327,7 @@ public:
       std::cout<<"Assign port"<<std::endl;
       char command[100];
       std::cout<<"FIX PORT ASSIGNEDMENT FIXME"<<std::endl;
-      sprintf(command,"./feLabVIEW.exe --client %s --port %u > test.log",hostname,fPort+1);
+      sprintf(command,"./feLabVIEW.exe --client %s --port %u &> test.log",hostname,fPort+1);
       std::cout<<"Running command:" << command<<std::endl;
       ss_system(command);
       return "New Frontend started";
@@ -291,7 +346,6 @@ public:
       //We use this as a char array... add terminating character at end of read
       fEventBuf[read_status]=0;
       std::cout<<fEventBuf<<std::endl;
-      const char* error;
       printf ("Supervisor received (%c%c%c%c)\n",fEventBuf[0],fEventBuf[1],fEventBuf[2],fEventBuf[3]);
       if (strncmp(fEventBuf,"START_FRONTEND",14)==0)
       {
@@ -352,7 +406,7 @@ public:
    }
 };
 
-enum RunStatusType{Unknown,Running,Stopped};
+
 
 class feLabVIEWWorker :
    public TMFeRpcHandlerInterface,
@@ -377,8 +431,9 @@ public:
    int RUNNO;
 
    HistoryLogger logger;
+   MessageHandler message;
 
-   feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq):logger(mfe,eq) // ctor
+   feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq):logger(mfe,eq), message(mfe) // ctor
    {
       fMfe = mfe;
       fEq  = eq;
@@ -391,6 +446,8 @@ public:
 
       RunStatus=Unknown;
       RUNNO=-1;
+
+
    }
 
    ~feLabVIEWWorker() // dtor
@@ -400,6 +457,7 @@ public:
          fEventBuf = NULL;
       }
    }
+
 
    void Init()
    {
@@ -482,6 +540,26 @@ public:
          {
             fMfe->Msg(MTALK, "feLabVIEW", (char*)bank->DATA);
          }
+         else if (strncmp(bank->NAME.VARNAME,"GET_RUNNO",9)==0)
+         {
+            char buf[20]={0};
+            sprintf(buf,"RunNumber:%d",RUNNO);
+            message.QueueMessage(buf);
+         }
+         else if (strncmp(bank->NAME.VARNAME,"GET_STATUS",10)==0) {
+            char buf[20];
+            switch (RunStatus)
+            {
+               case Unknown:
+                  sprintf(buf,"STATUS:UNKNOWN");
+               case Running:
+                  sprintf(buf,"STATUS:RUNNING");
+               case Stopped:
+                  sprintf(buf,"STATUS:STOPPED");
+               default:
+                  message.QueueMessage(buf);
+            }
+      }
          logger.Update(bank);
       } else {
          std::cout<<"Unknown bank data type... "<<std::endl;
@@ -491,7 +569,7 @@ public:
       return;
    }
 
-   const char* HandleBankArray(char * ptr)
+   void HandleBankArray(char * ptr)
    {
       LVBANKARRAY* array=(LVBANKARRAY*)ptr;
       if (array->GetTotalSize() > (uint32_t)fEventSize)
@@ -500,7 +578,8 @@ public:
          sprintf(error,"ERROR: More bytes sent (%u) than MIDAS has assiged for buffer (%u)",
                         array->BlockSize + array->GetHeaderSize(),
                         fEventSize);
-         return error;
+         message.QueueError(error);
+         return;
       }
       //array->print();
       char *buf=(char*)&array->DATA[0];
@@ -510,9 +589,9 @@ public:
          LogBank(buf);
          buf+=bank->GetHeaderSize()+bank->BlockSize*bank->NumberOfEntries;
       }
-      return NULL;
+      return;
    }
-   const char* HandleBank(char * ptr)
+   void HandleBank(char * ptr)
    {
       //Use invalid data type to probe the header
       LVBANK<void*>* ThisBank=(LVBANK<void*>*)ptr;
@@ -520,13 +599,14 @@ public:
       if (ThisBank->BlockSize+ThisBank->GetHeaderSize() > (uint32_t)fEventSize)
       {
          char error[100];
-         sprintf(error,"ERROR: More bytes sent (%u) than MIDAS has assiged for buffer (%u)",
+         sprintf(error,"ERROR: More bytes sent (%d) than MIDAS has assiged for buffer (%u)",
                         ThisBank->BlockSize + ThisBank->GetHeaderSize(),
                         fEventSize);
-         return error;
+         message.QueueError(error);
+         return;
       }
       LogBank(ptr);
-      return NULL;
+      return;
    }
 
    void HandlePeriodic()
@@ -553,39 +633,26 @@ public:
          return;
       int BankSize=0;
 
-      const char* error=NULL;
+      
       printf ("Received (%c%c%c%c)\n",ptr[0],ptr[1],ptr[2],ptr[3]);
       if (strncmp(ptr,"PYA1",4)==0 || strncmp(ptr,"LVA1",4)==0) {
          std::cout<<"Python / LabVIEW Bank Array found!"<<std::endl;
          LVBANKARRAY* bank=(LVBANKARRAY*)ptr;
          BankSize=bank->GetTotalSize();
-         error=HandleBankArray(ptr);
+         HandleBankArray(ptr);
       } else if (strncmp(ptr,"PYB1",4)==0 || strncmp(ptr,"LVB1",4)==0 ) {
          std::cout<<"Python / LabVIEW Bank found!"<<std::endl;
          LVBANK<void*>* bank=(LVBANK<void*>*)ptr;
          BankSize=bank->GetTotalSize();
-         error=HandleBank(ptr);
-      } else if (strncmp(ptr,"RUN_STATUS",10)==10) {
-         switch (RunStatus)
-         {
-            case Unknown:
-               zmq_send (responder, "UNKNOWN", 7, 0);
-               return;
-            case Running:
-               zmq_send (responder, "RUNNING", 7, 0);
-               return;
-            case Stopped:
-               zmq_send (responder, "STOPPED", 7, 0);
-               return;
-         }
-      } else if (strncmp(ptr,"RUN_NUMBER",10)==10) {
-         char message[32]={0};
-         sprintf(message,"RUNNO:%u",RUNNO);
-         zmq_send (responder, message, strlen(message), 0);
-         return;
+         HandleBank(ptr);
+      } else if (strncmp(ptr,"GIVE_ME_EVENT_SIZE",18)==0) {
+            char message[32]={0};
+            sprintf(message,"EventSize:%d",fEventSize);
+            zmq_send(responder, message, strlen(message), 0);
+            return;
       } else {
          std::cout<<"Unknown data type just received... "<<std::endl;
-         error="Unknown data type just received... ";
+         message.QueueError("Unknown data type just received... ");
          for (int i=0; i<20; i++)
             std::cout<<ptr[i];
          exit(1);
@@ -595,18 +662,15 @@ public:
       std::chrono::time_point<std::chrono::system_clock> timer_stop=std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> handlingtime=timer_stop - timer_start;
       std::cout<<"Handling time: "<<handlingtime.count()<<std::endl;
-      if (error)
-      {
-         zmq_send (responder, error, strlen(error), 0);
-         fMfe->Msg(MTALK, "feLabVIEW", error);
+      char buf[100];
+      sprintf(buf,"DATA OK (Processed in %fms)",1000*handlingtime.count());
+      message.QueueMessage(buf);
+
+      bool KillFrontend=message.HaveErrors();
+      std::string reply=message.ReadMessageQueue();
+      zmq_send (responder, reply.c_str(), reply.size(), 0);
+      if (KillFrontend)
          exit(1);
-      }
-      else
-      {
-         char message[100];
-         sprintf(message,"DATA OK (Processed in %fms)",1000*handlingtime.count());
-         zmq_send (responder, message, strlen(message), 0);
-      }
       return;
    }
 };
