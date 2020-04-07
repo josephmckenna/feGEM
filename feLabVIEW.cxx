@@ -26,10 +26,12 @@ class MessageHandler
       TMFE* fMfe;
       std::vector<std::string> MessageForLabVIEWQueue;
       std::vector<std::string> ErrorForLabVIEWQueue;
+      int TotalText;
    public:
    MessageHandler(TMFE* mfe)
    {
       fMfe=mfe;
+      TotalText=0;
    }
    ~MessageHandler()
    {
@@ -50,26 +52,55 @@ class MessageHandler
    {
       return ErrorForLabVIEWQueue.size();
    }
-
+   void QueueData(const char* msg)
+   {
+      int len=strlen(msg);
+      MessageForLabVIEWQueue.push_back(std::string("\"")+msg+std::string("\""));
+      TotalText+=len+2;
+   }
    void QueueMessage(const char* msg)
    {
-      MessageForLabVIEWQueue.push_back(std::string("<MSG>")+msg+std::string("</MSG>"));
+      int len=strlen(msg);
+      //Quote marks in messages must have escape characters! (JSON requirement)
+      for (int i=1; i<len; i++)
+         if (msg[i]=='\"')
+            assert(msg[i-1]=='\\');
+      MessageForLabVIEWQueue.push_back(std::string("\"msg:") + msg + std::string("\""));
+      TotalText+=len+6;
    }
    void QueueError(const char* err)
    {
+      int len=strlen(err);
+      //Quote marks in errors must have escape characters! (JSON requirement)
+      for (int i=1; i<len; i++)
+         if (err[i]=='"')
+            assert(err[i-1]=='\\');
       fMfe->Msg(MTALK, "feLabVIEW", err);
-      ErrorForLabVIEWQueue.push_back(std::string("<ERR>")+err+std::string("</ERR>"));
+      ErrorForLabVIEWQueue.push_back(std::string("\"err:") + err + std::string("\""));
+      TotalText+=len+6;
    }
    std::string ReadMessageQueue()
    {
-      std::string msg="<MIDAS>";
+      //Build basic JSON string ["msg:This is a message to LabVIEW","err:This Is An Error Message"]
+      std::string msg;
+      msg.reserve(TotalText+MessageForLabVIEWQueue.size()+ErrorForLabVIEWQueue.size()+1);
+      msg+="[";
+      int i=0;
       for (auto Message: MessageForLabVIEWQueue)
+      {
+         if (i++>0)
+            msg+=",";
          msg+=Message;
+      }
       MessageForLabVIEWQueue.clear();
       for (auto Error: ErrorForLabVIEWQueue)
+      {
+         if (i++>0)
+            msg+=",";
          msg+=Error;
+      }
       ErrorForLabVIEWQueue.clear();
-      msg+="</MIDAS>";
+      msg+="]";
       return msg;
    }
 
@@ -446,7 +477,7 @@ public:
 
       RunStatus=Unknown;
       RUNNO=-1;
-
+      fMfe->fOdbRoot->RI("Runinfo/Run number", &RUNNO);
 
    }
 
@@ -539,12 +570,15 @@ public:
          if (strncmp(bank->NAME.VARNAME,"TALK",4)==0)
          {
             fMfe->Msg(MTALK, "feLabVIEW", (char*)bank->DATA);
+            return;
          }
          else if (strncmp(bank->NAME.VARNAME,"GET_RUNNO",9)==0)
          {
             char buf[20]={0};
+            //JSON format already
             sprintf(buf,"RunNumber:%d",RUNNO);
-            message.QueueMessage(buf);
+            message.QueueData(buf);
+            return;
          }
          else if (strncmp(bank->NAME.VARNAME,"GET_STATUS",10)==0) {
             char buf[20];
@@ -557,8 +591,10 @@ public:
                case Stopped:
                   sprintf(buf,"STATUS:STOPPED");
                default:
-                  message.QueueMessage(buf);
+                  //JSON format already
+                  message.QueueData(buf);
             }
+            return;
       }
          logger.Update(bank);
       } else {
