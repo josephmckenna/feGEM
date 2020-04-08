@@ -478,7 +478,8 @@ public:
       RunStatus=Unknown;
       RUNNO=-1;
       fMfe->fOdbRoot->RI("Runinfo/Run number", &RUNNO);
-
+      fEq->fOdbEqCommon->WI("Period",100);
+      eq->fCommon->Period=100;
    }
 
    ~feLabVIEWWorker() // dtor
