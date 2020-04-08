@@ -20,7 +20,7 @@ T change_endian(T in)
 
 std::string sanitiseString(const char* input, int assert_size=0)
 {
-   
+   //std::cout<<input;
    const int input_size=strlen(input);
    int output_size=input_size;
    if (assert_size)
@@ -31,7 +31,7 @@ std::string sanitiseString(const char* input, int assert_size=0)
    int i,j;
    for (i = 0, j = 0; i<input_size; i++,j++)
    {
-      if (isalnum(input[i]))
+      if (isalnum(input[i]) || input[i]=='_' || input[i]=='-')
       {
          output[j]=input[i];
       }
@@ -43,6 +43,7 @@ std::string sanitiseString(const char* input, int assert_size=0)
    output[j]=0;
    if (assert_size)
       output[assert_size]=0;
+   //std::cout<<"\t\t"<<output.c_str()<<std::endl;
    return output;
 }
 
