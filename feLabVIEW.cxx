@@ -471,7 +471,72 @@ public:
    }
 };
 
+class PeriodicityManager
+{
+   private:
+   int fNumberOfConnections;
+   std::vector<std::string> RemoteCallers;
+   TMFeEquipment* fEq;
+   TMFE* fMfe;
+   public:
+   PeriodicityManager(TMFE* mfe,TMFeEquipment* eq)
+   {
+      fEq=eq;
+      fMfe=mfe;
+      fNumberOfConnections=1;
+   }
+   char* ProgramName(char* string)
+   {
+      int length=strlen(string);
+      for (int i=0; i<=length; i++)
+      {
+         if (strncmp((string+i),"PROGRAM:",8)==0)
+         {
+            return string+i+8;
+         }
+      }
+      return "Badly formatted string";
+   }
+   void AddRemoteCaller(char* prog)
+   {
+      for (auto item: RemoteCallers)
+      {
+         if (strcmp(prog,item.c_str())==0)
+         {
+            std::cout<<"Restarted program detected ("<<ProgramName(prog)<<")! Total:"<<fNumberOfConnections<<std::endl;
+            fMfe->Msg(MTALK, "feLabVIEW", "Restart of program %s detected",ProgramName(prog));
+            return;
+         }
+      }
+      //Item not already in list
+      ++fNumberOfConnections;
+      std::cout<<"New connection detected ("<<ProgramName(prog)<<")! Total:"<<fNumberOfConnections<<std::endl;
+      RemoteCallers.push_back(prog);
+   }
+   void UpdatePerodicity()
+   {
+         std::cout<<fEq->fCommon->Period <<" > "<< 1000./ (double)fNumberOfConnections<<std::endl;
+         if (fEq->fCommon->Period > 1000./ (double)fNumberOfConnections)
+         {
+            fEq->fCommon->Period = 1000./ (double)fNumberOfConnections;
+            std::cout<<"Periodicity increase to "<<fEq->fCommon->Period<<"ms"<<std::endl;
+         }
+   }
+   void ProcessMessage(LVBANK<char>* bank)
+   {
+      std::cout<<(char*)&(bank->DATA[0].DATA)<<std::endl;
+      if (strncmp((char*)&(bank->DATA[0].DATA),"New labview connection from",27)==0)
+      {
+         char ProgramName[100];
+         bool MessageOK=false;
+         snprintf(ProgramName,bank->BlockSize-16,"%s",(char*)&(bank->DATA[0].DATA));
+         AddRemoteCaller(ProgramName);
 
+         UpdatePerodicity();
+      }
+      return;
+   }
+};
 
 class feLabVIEWWorker :
    public TMFeRpcHandlerInterface,
@@ -491,23 +556,22 @@ public:
    int fEventSize;
    char* fEventBuf;
 
-   int fNumberOfConnections;
+   
+   
    
    RunStatusType RunStatus;
    int RUNNO;
 
    HistoryLogger logger;
    MessageHandler message;
-
-   feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq):logger(mfe,eq), message(mfe) // ctor
+   PeriodicityManager periodicity;
+   feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq):logger(mfe,eq), message(mfe), periodicity(mfe,eq) // ctor
    {
       fMfe = mfe;
       fEq  = eq;
       //Default event size ok 10kb, will be overwritten by ODB entry in Init()
       fEventSize = 10000;
       fEventBuf  = NULL;
-
-      fNumberOfConnections=0;
 
       context = zmq_ctx_new ();
       responder = zmq_socket (context, ZMQ_REP);
@@ -611,16 +675,7 @@ public:
             fMfe->Msg(MTALK, "feLabVIEW", (char*)bank->DATA);
             if (strncmp(bank->NAME.VARCATEGORY,"LVSYSMON",8)==0)
             {
-               if (strncmp((char*)&(bank->DATA[0].DATA),"New labview connection from",27)==0)
-               {
-                  std::cout<<"New connection detected! Total:"<<++fNumberOfConnections<<std::endl;
-                  std::cout<<fEq->fCommon->Period <<" > "<< 1000./ (double)fNumberOfConnections<<std::endl;
-                  if (fEq->fCommon->Period > 1000./ (double)fNumberOfConnections)
-                  {
-                     fEq->fCommon->Period = 1000./ (double)fNumberOfConnections;
-                     std::cout<<"Periodicity increase to "<<fEq->fCommon->Period<<"ms"<<std::endl;
-                  }
-               }
+               periodicity.ProcessMessage(bank);
             }
             return;
          }

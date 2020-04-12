@@ -9,6 +9,9 @@
 #include <cstring>
 #include <fstream>
 
+
+#include <zmq.h>
+
 template <class T>
 T change_endian(T in)
 {
