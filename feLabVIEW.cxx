@@ -14,7 +14,7 @@
 #include "midas.h"
 #include "tmfe.h"
 
-#include <zmq.h>
+
 #include "feLabVIEW.h"
 
 #include "msystem.h"
@@ -352,13 +352,47 @@ public:
       fMfe->Msg(MINFO, "HandleEndRun", "End run!");
       fEq->SetStatus("Stopped", "#00FF00");
    }
+   int FindHostInWorkerList(const char* hostname)
+   {
+      std::vector<std::string> hostlist;
+      fOdbWorkers->RSA("HostName", &hostlist);
+      int size=hostlist.size();
+      for (int i=0; i<size; i++)
+      {
+         if (strcmp(hostlist.at(i).c_str(),hostname)==0)
+         return i;
+      }
+      fOdbWorkers->WSAI("HostName",size,hostname); 
+      return size;
+   }
+   int AssignPortForWorker(int workerID)
+   {
+      std::vector<uint32_t> list;
+      fOdbWorkers->RU32A("Port", &list);
+      if (workerID>=list.size())
+      {
+         int port=fPort+workerID+1;
+         fOdbWorkers->WU32AI("Port",port,workerID);
+         return port;
+      }
+      else
+      {
+         return list.at(workerID);
+      }
+   }
    char* AddNewClient(const char* hostname)
    {
       std::cout<<"Check list of workers"<<std::endl;
-      std::cout<<"Assign port"<<std::endl;
+      #if 0
+      int WorkerNo=FindHostInWorkerList(const char* hostname);
+      int port=AssignPortForWorker(WorkerNo);
+      std::cout<<"Assign port "<<port<< " for worker "<<WorkerNo<<std::endl;
+      #else
+      int port=5556;
+      int WorkerNo=0;
+      #endif
       char command[100];
-      std::cout<<"FIX PORT ASSIGNEDMENT FIXME"<<std::endl;
-      sprintf(command,"./feLabVIEW.exe --client %s --port %u &> test.log",hostname,fPort+1);
+      sprintf(command,"./feLabVIEW.exe --client %s --port %u &> test-%u.log",hostname,port,WorkerNo);
       std::cout<<"Running command:" << command<<std::endl;
       ss_system(command);
       return "New Frontend started";
@@ -457,6 +491,7 @@ public:
    int fEventSize;
    char* fEventBuf;
 
+   int fNumberOfConnections;
    
    RunStatusType RunStatus;
    int RUNNO;
@@ -472,14 +507,17 @@ public:
       fEventSize = 10000;
       fEventBuf  = NULL;
 
+      fNumberOfConnections=0;
+
       context = zmq_ctx_new ();
       responder = zmq_socket (context, ZMQ_REP);
 
       RunStatus=Unknown;
       RUNNO=-1;
       fMfe->fOdbRoot->RI("Runinfo/Run number", &RUNNO);
-      fEq->fOdbEqCommon->WI("Period",100);
-      eq->fCommon->Period=100;
+      int period=1000;
+      fEq->fOdbEqCommon->RI("Period",&period);
+      eq->fCommon->Period=period;
    }
 
    ~feLabVIEWWorker() // dtor
@@ -571,6 +609,19 @@ public:
          if (strncmp(bank->NAME.VARNAME,"TALK",4)==0)
          {
             fMfe->Msg(MTALK, "feLabVIEW", (char*)bank->DATA);
+            if (strncmp(bank->NAME.VARCATEGORY,"LVSYSMON",8)==0)
+            {
+               if (strncmp((char*)&(bank->DATA[0].DATA),"New labview connection from",27)==0)
+               {
+                  std::cout<<"New connection detected! Total:"<<++fNumberOfConnections<<std::endl;
+                  std::cout<<fEq->fCommon->Period <<" > "<< 1000./ (double)fNumberOfConnections<<std::endl;
+                  if (fEq->fCommon->Period > 1000./ (double)fNumberOfConnections)
+                  {
+                     fEq->fCommon->Period = 1000./ (double)fNumberOfConnections;
+                     std::cout<<"Periodicity increase to "<<fEq->fCommon->Period<<"ms"<<std::endl;
+                  }
+               }
+            }
             return;
          }
          else if (strncmp(bank->NAME.VARNAME,"GET_RUNNO",9)==0)
