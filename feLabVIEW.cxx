@@ -524,14 +524,14 @@ class PeriodicityManager
    }
    void ProcessMessage(LVBANK<char>* bank)
    {
-      std::cout<<(char*)&(bank->DATA[0].DATA)<<std::endl;
-      if (strncmp((char*)&(bank->DATA[0].DATA),"New labview connection from",27)==0)
+      //std::cout<<(char*)&(bank->DATA[0].DATA)<<std::endl;
+      if ((strncmp((char*)&(bank->DATA[0].DATA),"New labview connection from",27)==0) ||
+          (strncmp((char*)&(bank->DATA[0].DATA),"New python connection from",26)==0))
       {
          char ProgramName[100];
          bool MessageOK=false;
          snprintf(ProgramName,bank->BlockSize-16,"%s",(char*)&(bank->DATA[0].DATA));
          AddRemoteCaller(ProgramName);
-
          UpdatePerodicity();
       }
       return;
@@ -673,7 +673,8 @@ public:
          if (strncmp(bank->NAME.VARNAME,"TALK",4)==0)
          {
             fMfe->Msg(MTALK, "feLabVIEW", (char*)bank->DATA);
-            if (strncmp(bank->NAME.VARCATEGORY,"LVSYSMON",8)==0)
+            if ((strncmp(bank->NAME.VARCATEGORY,"LVSYSMON",8)==0) ||
+                (strncmp(bank->NAME.VARCATEGORY,"PYSYSMON",8)==0) )
             {
                periodicity.ProcessMessage(bank);
             }
