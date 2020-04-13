@@ -322,7 +322,7 @@ public:
       fEq->fOdbEqSettings->RI("port_range_stop",&fPortRangeStop, true);
       assert(fPort>0);
       fOdbWorkers=fEq->fOdbEqSettings->Chdir("WorkerList",true);
-      fOdbWorkers->WU32("HostName",0);
+      fOdbWorkers->WS("HostName","",32);
       fOdbWorkers->WU32("DateAdded",0);
       fOdbWorkers->WU32("Port",0);
 
@@ -361,10 +361,15 @@ public:
       int size=hostlist.size();
       for (int i=0; i<size; i++)
       {
+         std::cout<<i<<":"<<hostlist.at(i).c_str()<<std::endl;
          if (strcmp(hostlist.at(i).c_str(),hostname)==0)
-         return i;
+         {
+            std::cout<<"Match found!"<<std::endl;
+            return i;
+         }
       }
-      fOdbWorkers->WSAI("HostName",size,hostname); 
+      fOdbWorkers->WSAI("HostName",size,hostname);
+      std::cout<<"No Match... return size:"<<size<<std::endl;
       return size;
    }
    int AssignPortForWorker(int workerID)
@@ -374,7 +379,7 @@ public:
       if (workerID>=list.size())
       {
          int port=fPort+workerID+1;
-         fOdbWorkers->WU32AI("Port",port,workerID);
+         fOdbWorkers->WU32AI("Port",workerID,port);
          return port;
       }
       else
@@ -385,8 +390,8 @@ public:
    char* AddNewClient(const char* hostname)
    {
       std::cout<<"Check list of workers"<<std::endl;
-      #if 0
-      int WorkerNo=FindHostInWorkerList(const char* hostname);
+      #if 1
+      int WorkerNo=FindHostInWorkerList(hostname);
       int port=AssignPortForWorker(WorkerNo);
       std::cout<<"Assign port "<<port<< " for worker "<<WorkerNo<<std::endl;
       #else
@@ -444,7 +449,16 @@ public:
          return;
       } else if (strncmp(fEventBuf,"GIVE_ME_ADDRESS",15)==0) {
          char hostname[100];
-         sprintf(hostname,"%s",&fEventBuf[19]);
+         sprintf(hostname,"%s",&fEventBuf[16]);
+         //Trim the hostname at the first '.'
+         for (int i=0; i<100; i++)
+         {
+            if (hostname[i]=='.')
+            {
+               hostname[i]=0;
+               break;
+            }
+         }
          std::cout<<hostname<<std::endl;
          for (int i=0; i<100; i++)
          {
@@ -456,8 +470,10 @@ public:
          }
          char log_to_address[100];
          //sprintf(log_to_address,"%s","tcp://127.0.0.1:5556");
-         sprintf(log_to_address,"%s","tcp://alphamidastest8:5556");
-         std::cout<<"FIXME:"<<log_to_address<<std::endl;
+         int WorkerNo=FindHostInWorkerList(hostname);
+         int port=AssignPortForWorker(WorkerNo);
+         sprintf(log_to_address,"tcp://alphamidastest8:%u",port);
+         std::cout<<"SEND DATA TO ADDRESS:"<<log_to_address<<std::endl;
          zmq_send (responder, log_to_address, strlen(log_to_address), 0);
          return;
       } else {
