@@ -299,6 +299,8 @@ public:
       fPortRangeStart = 13000;
       fPortRangeStop  = 13999;
 
+      
+
       context = zmq_ctx_new ();
       responder = zmq_socket (context, ZMQ_REP);
       fPort=5555;
@@ -391,11 +393,23 @@ public:
       int port=5556;
       int WorkerNo=0;
       #endif
-      char command[100];
-      sprintf(command,"./feLabVIEW.exe --client %s --port %u &> test-%u.log",hostname,port,WorkerNo);
-      std::cout<<"Running command:" << command<<std::endl;
-      ss_system(command);
-      return "New Frontend started";
+      void *local_context = zmq_ctx_new ();
+      void *pinger = zmq_socket (local_context, ZMQ_REQ);
+      char bind_port[100];
+      sprintf(bind_port,"tcp://*:%d",port);
+      std::cout<<"Binding to: "<<bind_port<<std::endl;
+      int rc=zmq_bind (pinger, bind_port);
+      if (rc!=0)
+      {
+         std::cout<<"Binding failed! The frontend is probably running... wahoo"<<std::endl;
+      } else {
+         zmq_unbind (pinger, bind_port);
+         char command[100];
+         sprintf(command,"./feLabVIEW.exe --client %s --port %u &> test-%u.log",hostname,port,WorkerNo);
+         std::cout<<"Running command:" << command<<std::endl;
+         ss_system(command);
+         return "New Frontend started";
+      }
       return "Frontend already running";
    }
    void HandlePeriodic()
@@ -415,7 +429,7 @@ public:
       if (strncmp(fEventBuf,"START_FRONTEND",14)==0)
       {
          char hostname[100];
-         sprintf(hostname,"%s",&fEventBuf[19]);
+         sprintf(hostname,"%s",&fEventBuf[15]);
          //Trim the hostname at the first '.'
          for (int i=0; i<100; i++)
          {
@@ -776,10 +790,14 @@ public:
       if (read_status<0)
          return;
       int BankSize=0;
-
+      
       
       printf ("Received (%c%c%c%c)\n",ptr[0],ptr[1],ptr[2],ptr[3]);
-      if (strncmp(ptr,"PYA1",4)==0 || strncmp(ptr,"LVA1",4)==0) {
+      if (strncmp(ptr,"PING",4)==0) {
+         std::cout<<"PING!!!"<<std::endl;
+         zmq_send(responder, "PONG", 4, 0);
+         return;
+      } else if (strncmp(ptr,"PYA1",4)==0 || strncmp(ptr,"LVA1",4)==0) {
          std::cout<<"Python / LabVIEW Bank Array found!"<<std::endl;
          LVBANKARRAY* bank=(LVBANKARRAY*)ptr;
          BankSize=bank->GetTotalSize();
