@@ -145,7 +145,7 @@ struct LVBANK {
    {
       return sanitiseString(NAME.VARNAME,sizeof(NAME.VARNAME));
    }
-   uint64_t GetHeaderSize()
+   uint32_t GetHeaderSize()
    {
       return sizeof(NAME)
              + sizeof(EquipmentType)
@@ -154,7 +154,7 @@ struct LVBANK {
              + sizeof(BlockSize)
              + sizeof(NumberOfEntries);
    }
-   uint64_t GetTotalSize()
+   uint32_t GetTotalSize()
    {
       return GetHeaderSize()+BlockSize*NumberOfEntries;
    }
