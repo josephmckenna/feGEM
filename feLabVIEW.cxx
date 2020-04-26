@@ -21,7 +21,6 @@
 enum RunStatusType{Unknown,Running,Stopped};
 class MessageHandler
 {
-   
    private:
       TMFE* fMfe;
       std::vector<std::string> MessageForLabVIEWQueue;
@@ -372,7 +371,7 @@ public:
       std::cout<<"No Match... return size:"<<size<<std::endl;
       return size;
    }
-   int AssignPortForWorker(int workerID)
+   int AssignPortForWorker(uint workerID)
    {
       std::vector<uint32_t> list;
       fOdbWorkers->RU32A("Port", &list);
@@ -387,7 +386,7 @@ public:
          return list.at(workerID);
       }
    }
-   char* AddNewClient(const char* hostname)
+   const char* AddNewClient(const char* hostname)
    {
       std::cout<<"Check list of workers"<<std::endl;
       #if 1
@@ -420,7 +419,7 @@ public:
    void HandlePeriodic()
    {
       printf("periodic!\n");
-      std::chrono::time_point<std::chrono::system_clock> timer_start=std::chrono::high_resolution_clock::now();
+      //std::chrono::time_point<std::chrono::system_clock> timer_start=std::chrono::high_resolution_clock::now();
       
       int read_status=zmq_recv (responder, fEventBuf, fEventSize, ZMQ_NOBLOCK);
       
@@ -508,14 +507,19 @@ class PeriodicityManager
    std::vector<std::string> RemoteCallers;
    TMFeEquipment* fEq;
    TMFE* fMfe;
+   int fPeriodicWithData;
+   int fPeriodicWithoutData;
+
    public:
    PeriodicityManager(TMFE* mfe,TMFeEquipment* eq)
    {
       fEq=eq;
       fMfe=mfe;
       fNumberOfConnections=1;
+      fPeriodicWithData=0;
+      fPeriodicWithoutData=0;
    }
-   char* ProgramName(char* string)
+   const char* ProgramName(char* string)
    {
       int length=strlen(string);
       for (int i=0; i<=length; i++)
@@ -543,14 +547,43 @@ class PeriodicityManager
       std::cout<<"New connection detected ("<<ProgramName(prog)<<")! Total:"<<fNumberOfConnections<<std::endl;
       RemoteCallers.push_back(prog);
    }
+   void LogPeriodicWithData()
+   {
+      fPeriodicWithData++;
+      // Every 1000 events, check that we are have more polls that data being sent 
+      // (UpdatePerodicity should keep this up to date)
+      if (fPeriodicWithData%1000==0)
+      {
+         // fPeriodicWithData / fPeriodicWithoutData ~= fNumberOfConnections;
+         double EstimatedConnections = (double)fPeriodicWithData / (double)fPeriodicWithoutData;
+         double tolerance=0.1; //10 percent
+         if ( EstimatedConnections > fNumberOfConnections*(1+tolerance) )
+         {
+            if ( EstimatedConnections < fNumberOfConnections*(1-tolerance) )
+            {
+               //The usage of the periodic tasks is beyond spec... perhaps a user didn't initialise connect properly
+               fMfe->Msg(MTALK,
+                        "feLabVIEW", "%s periodic tasks are very busy... miss use of the LabVIEW library?",
+                        fMfe->fFrontendName.c_str()
+                        );
+            }
+         }
+      }
+   }
+   void LogPeriodicWithoutData()
+   {
+      fPeriodicWithoutData++;
+   }
    void UpdatePerodicity()
    {
-         std::cout<<fEq->fCommon->Period <<" > "<< 1000./ (double)fNumberOfConnections<<std::endl;
-         if (fEq->fCommon->Period > 1000./ (double)fNumberOfConnections)
-         {
-            fEq->fCommon->Period = 1000./ (double)fNumberOfConnections;
-            std::cout<<"Periodicity increase to "<<fEq->fCommon->Period<<"ms"<<std::endl;
-         }
+      std::cout<<fEq->fCommon->Period <<" > "<< 1000./ (double)fNumberOfConnections<<std::endl;
+      if (fEq->fCommon->Period > 1000./ (double)fNumberOfConnections)
+      {
+         fEq->fCommon->Period = 1000./ (double)fNumberOfConnections;
+         std::cout<<"Periodicity increase to "<<fEq->fCommon->Period<<"ms"<<std::endl;
+      }
+      fPeriodicWithData=0;
+      fPeriodicWithoutData=0;
    }
    void ProcessMessage(LVBANK<char>* bank)
    {
@@ -559,7 +592,6 @@ class PeriodicityManager
           (strncmp((char*)&(bank->DATA[0].DATA),"New python connection from",26)==0))
       {
          char ProgramName[100];
-         bool MessageOK=false;
          snprintf(ProgramName,bank->BlockSize-16,"%s",(char*)&(bank->DATA[0].DATA));
          AddRemoteCaller(ProgramName);
          UpdatePerodicity();
@@ -586,15 +618,13 @@ public:
    int fEventSize;
    char* fEventBuf;
 
-   
-   
-   
    RunStatusType RunStatus;
    int RUNNO;
 
    HistoryLogger logger;
    MessageHandler message;
    PeriodicityManager periodicity;
+
    feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq):logger(mfe,eq), message(mfe), periodicity(mfe,eq) // ctor
    {
       fMfe = mfe;
@@ -773,8 +803,8 @@ public:
       if (ThisBank->BlockSize+ThisBank->GetHeaderSize() > (uint32_t)fEventSize)
       {
          char error[100];
-         sprintf(error,"ERROR: More bytes sent (%d) than MIDAS has assiged for buffer (%u)",
-                        ThisBank->BlockSize + ThisBank->GetHeaderSize(),
+         sprintf(error,"ERROR: More bytes sent (%u) than MIDAS has assiged for buffer (%d)",
+                        ThisBank->GetTotalSize(),
                         fEventSize);
          message.QueueError(error);
          return;
@@ -790,9 +820,7 @@ public:
       //char buf[256];
       //sprintf(buf, "buffered %d (max %d), dropped %d, unknown %d, max flushed %d", gUdpPacketBufSize, fMaxBuffered, fCountDroppedPackets, fCountUnknownPackets, fMaxFlushed);
       //fEq->SetStatus(buf, "#00FF00");
-      //fEq->WriteStatistics();
-      
-      //char buffer [10];
+      fEq->WriteStatistics();
 
       fEq->ComposeEvent(fEventBuf, fEventSize);
       fEq->BkInit(fEventBuf, fEventSize);
@@ -804,10 +832,16 @@ public:
       int read_status=zmq_recv (responder, ptr, fEventSize, ZMQ_NOBLOCK);
       //No data to read... does quitting cause a memory leak? It seems not (tested with valgrind)
       if (read_status<0)
+      {
+         periodicity.LogPeriodicWithoutData();
          return;
+      }
+      else
+      {
+         periodicity.LogPeriodicWithData();
+      }
+
       int BankSize=0;
-      
-      
       printf ("Received (%c%c%c%c)\n",ptr[0],ptr[1],ptr[2],ptr[3]);
       if (strncmp(ptr,"PING",4)==0) {
          std::cout<<"PING!!!"<<std::endl;
@@ -825,7 +859,7 @@ public:
          HandleBank(ptr);
       } else if (strncmp(ptr,"GIVE_ME_EVENT_SIZE",18)==0) {
             char message[32]={0};
-            sprintf(message,"EventSize:%d",fEventSize);
+            sprintf(message,"[\"EventSize:%d\"]",fEventSize);
             zmq_send(responder, message, strlen(message), 0);
             return;
       } else {
