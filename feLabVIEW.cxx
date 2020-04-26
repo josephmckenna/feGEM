@@ -298,8 +298,6 @@ public:
       fPortRangeStart = 13000;
       fPortRangeStop  = 13999;
 
-      
-
       context = zmq_ctx_new ();
       responder = zmq_socket (context, ZMQ_REP);
       fPort=5555;
@@ -559,14 +557,15 @@ class PeriodicityManager
          double tolerance=0.1; //10 percent
          if ( EstimatedConnections > fNumberOfConnections*(1+tolerance) )
          {
-            if ( EstimatedConnections < fNumberOfConnections*(1-tolerance) )
-            {
-               //The usage of the periodic tasks is beyond spec... perhaps a user didn't initialise connect properly
-               fMfe->Msg(MTALK,
-                        "feLabVIEW", "%s periodic tasks are very busy... miss use of the LabVIEW library?",
-                        fMfe->fFrontendName.c_str()
-                        );
-            }
+            //The usage of the periodic tasks is beyond spec... perhaps a user didn't initialise connect properly
+            fMfe->Msg(MTALK,
+                     "feLabVIEW", "%s periodic tasks are very busy... miss use of the LabVIEW library?",
+                     fMfe->fFrontendName.c_str()
+                     );
+         }
+         if ( EstimatedConnections < fNumberOfConnections*(1-tolerance) )
+         {
+            std::cout<<"Traffic low or inconsistance for fronent:"<<fMfe->fFrontendName.c_str()<<std::endl;
          }
       }
    }
