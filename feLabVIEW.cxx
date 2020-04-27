@@ -102,8 +102,8 @@ class MessageHandler
       msg+="]";
       return msg;
    }
-
 };
+
 #include <chrono>
 class HistoryVariable
 {
@@ -122,7 +122,15 @@ class HistoryVariable
       fLastUpdate=0;
 
       //Prepare ODB entry for variable
-      MVOdb* OdbEq = mfe->fOdbRoot->Chdir((std::string("Equipment/") + fCategory).c_str(), true);
+      MVOdb* OdbEq = NULL;
+      if (strncmp(lvbank->GetCategoryName().c_str(),"THISHOST",8)==0)
+      {
+         OdbEq = mfe->fOdbRoot->Chdir((std::string("Equipment/") + mfe->fFrontendName).c_str(), true);
+      }
+      else
+      {
+         OdbEq = mfe->fOdbRoot->Chdir((std::string("Equipment/") + fCategory).c_str(), true);
+      }
       fOdbEqVariables  = OdbEq->Chdir("Variables", true);
    }
    template<typename T>
@@ -410,6 +418,8 @@ public:
          sprintf(command,"./feLabVIEW.exe --client %s --port %u &> test-%u.log",hostname,port,WorkerNo);
          std::cout<<"Running command:" << command<<std::endl;
          ss_system(command);
+         zmq_close(pinger);
+         zmq_ctx_destroy(local_context);
          return "New Frontend started";
       }
       return "Frontend already running";
@@ -649,6 +659,8 @@ public:
          free(fEventBuf);
          fEventBuf = NULL;
       }
+      zmq_close(responder);
+      zmq_ctx_destroy(context);
    }
 
 
@@ -731,7 +743,8 @@ public:
          LVBANK<char>* bank=(LVBANK<char>*)buf;
          if (strncmp(bank->NAME.VARNAME,"TALK",4)==0)
          {
-            fMfe->Msg(MTALK, "feLabVIEW", (char*)bank->DATA);
+            bank->print();
+            fMfe->Msg(MTALK, "feLabVIEW", (char*)bank->DATA->DATA);
             if ((strncmp(bank->NAME.VARCATEGORY,"LVSYSMON",8)==0) ||
                 (strncmp(bank->NAME.VARCATEGORY,"PYSYSMON",8)==0) )
             {
