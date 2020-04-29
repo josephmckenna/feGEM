@@ -832,7 +832,7 @@ public:
       //char buf[256];
       //sprintf(buf, "buffered %d (max %d), dropped %d, unknown %d, max flushed %d", gUdpPacketBufSize, fMaxBuffered, fCountDroppedPackets, fCountUnknownPackets, fMaxFlushed);
       //fEq->SetStatus(buf, "#00FF00");
-      fEq->WriteStatistics();
+
 
       fEq->ComposeEvent(fEventBuf, fEventSize);
       fEq->BkInit(fEventBuf, fEventSize);
@@ -850,6 +850,7 @@ public:
       }
       else
       {
+         fEq->WriteStatistics();
          periodicity.LogPeriodicWithData();
       }
 
