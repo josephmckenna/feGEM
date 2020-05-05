@@ -387,7 +387,6 @@ public:
    
    //ZeroMQ stuff
    
-   void *context;
    void *responder;
 
    int fPort;
@@ -402,7 +401,7 @@ public:
    MessageHandler message;
    PeriodicityManager periodicity;
 
-   feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq):logger(mfe,eq), message(mfe), periodicity(mfe,eq) // ctor
+   feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq, void* context):logger(mfe,eq), message(mfe), periodicity(mfe,eq) // ctor
    {
       fMfe = mfe;
       fEq  = eq;
@@ -410,7 +409,6 @@ public:
       fEventSize = 10000;
       fEventBuf  = NULL;
 
-      context = zmq_ctx_new ();
       responder = zmq_socket (context, ZMQ_REP);
 
       RunStatus=Unknown;
@@ -428,7 +426,6 @@ public:
          fEventBuf = NULL;
       }
       zmq_close(responder);
-      zmq_ctx_destroy(context);
    }
 
 
@@ -808,23 +805,70 @@ public:
       int port=5556;
       int WorkerNo=0;
       #endif
-      void *local_context = zmq_ctx_new ();
-      void *pinger = zmq_socket (local_context, ZMQ_REQ);
-      char bind_port[100];
-      sprintf(bind_port,"tcp://*:%d",port);
-      std::cout<<"Binding to: "<<bind_port<<std::endl;
-      int rc=zmq_bind (pinger, bind_port);
-      if (rc!=0)
+      if (WorkerNo.second==false)
+      
       {
-         std::cout<<"Binding failed! The frontend is probably running... wahoo"<<std::endl;
-      } else {
-         zmq_unbind (pinger, bind_port);
-         char command[100];
-         sprintf(command,"./feLabVIEW.exe --client %s --port %u &> test-%u.log",hostname,port,WorkerNo.first);
-         std::cout<<"Running command:" << command<<std::endl;
-         ss_system(command);
-         zmq_close(pinger);
-         zmq_ctx_destroy(local_context);
+      //void *local_context = zmq_ctx_new ();
+      //void *pinger = zmq_socket (local_context, ZMQ_REQ);
+      //char bind_port[100];
+      //sprintf(bind_port,"tcp://*:%d",port);
+      //std::cout<<"Binding to: "<<bind_port<<std::endl;
+      //int rc=zmq_bind (pinger, bind_port);
+      //if (rc!=0)
+      //{
+      //   std::cout<<"Binding failed! The frontend is probably running... wahoo"<<std::endl;
+      //   zmq_close(pinger);
+      //   zmq_ctx_destroy(local_context);
+      //} else {
+      //   zmq_unbind (pinger, bind_port);
+         //char command[100];
+         //sprintf(command,"./feLabVIEW.exe --client %s --port %u &> test-%u.log ",hostname,port,WorkerNo);
+         //std::cout<<"Running command:" << command<<std::endl;
+         //ss_system(command);
+         //std::cout<<"Command launched"<<std::endl;
+         //zmq_close(pinger);
+         //zmq_ctx_destroy(local_context);
+
+         std::string name = "fe";
+         name+="LV_";
+         name+=hostname;
+
+         TMFE* mfe = TMFE::Instance();
+         //TMFE* mfe=fMfe;
+         if (name.size()>31)
+         {
+            mfe->Msg(MERROR, "feLabVIEW", "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
+            exit(1);
+         }
+         //TMFeError err = mfe->Connect(name.c_str(), __FILE__);
+         //if (err.error) {
+         //   printf("Cannot connect, bye.\n");
+         //   exit(1);
+         //}
+
+         TMFeCommon *common = new TMFeCommon();
+         common->EventID = 1;
+         common->LogHistory = 1;
+
+         TMFeEquipment* worker_eq = new TMFeEquipment(mfe, name.c_str(), common);
+         worker_eq->Init();
+         //If not default setting, update ODB
+         //if (max_event_size!=0)
+         //   worker_eq->fOdbEqSettings->WI("event_size", max_event_size);
+
+         worker_eq->SetStatus("Starting...", "white");
+         worker_eq->ZeroStatistics();
+         worker_eq->WriteStatistics();
+         mfe->RegisterEquipment(worker_eq);
+         feLabVIEWWorker* workerfe = new feLabVIEWWorker(mfe,worker_eq,context);
+         workerfe->fPort=port;
+         mfe->RegisterRpcHandler(workerfe);
+         workerfe->Init();
+         mfe->RegisterPeriodicHandler(worker_eq, workerfe);
+
+         mfe->StartRpcThread();
+         mfe->StartPeriodicThread();
+         worker_eq->SetStatus("Started", "white");
          return "New Frontend started";
       }
       return "Frontend already running";
@@ -1015,7 +1059,7 @@ int main(int argc, char* argv[])
    }
    else
    {
-      feLabVIEWWorker* myfe = new feLabVIEWWorker(mfe,eq);
+      feLabVIEWWorker* myfe = new feLabVIEWWorker(mfe,eq, zmq_ctx_new ());
       myfe->fPort=port;
       mfe->RegisterRpcHandler(myfe);
       myfe->Init();
