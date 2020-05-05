@@ -78,7 +78,11 @@ struct LVDATA {
       std::cout<<"   size:"<<data_points<<std::endl;
       if (LittleEndian)
          for (int i=0; i<data_points; i++)
-            std::cout<<"   DATA["<<i<<"]="<<DATA[i]<<std::endl;
+            if (DATA[i])
+               std::cout<<"   DATA["<<i<<"]="<<DATA[i]<<std::endl;
+            else
+               std::cout<<"   DATA["<<i<<"]="<<"NULL"<<std::endl;
+            
       else
          for (int i=0; i<data_points; i++)
             std::cout<<"   DATA["<<i<<"]="<<change_endian(DATA[i])<<std::endl;
