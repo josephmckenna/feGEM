@@ -401,7 +401,7 @@ public:
    MessageHandler message;
    PeriodicityManager periodicity;
 
-   feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq, void* context):logger(mfe,eq), message(mfe), periodicity(mfe,eq) // ctor
+   feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq):logger(mfe,eq), message(mfe), periodicity(mfe,eq) // ctor
    {
       fMfe = mfe;
       fEq  = eq;
@@ -409,7 +409,7 @@ public:
       fEventSize = 10000;
       fEventBuf  = NULL;
 
-      responder = zmq_socket (context, ZMQ_REP);
+      //responder = zmq_socket (context, ZMQ_REP);
 
       RunStatus=Unknown;
       RUNNO=-1;
@@ -425,7 +425,7 @@ public:
          free(fEventBuf);
          fEventBuf = NULL;
       }
-      zmq_close(responder);
+      //zmq_close(responder);
    }
 
 
@@ -675,12 +675,11 @@ class feLabVIEWSupervisor :
 public:
    TMFE* fMfe;
    TMFeEquipment* fEq;
-   
-   //ZeroMQ stuff
-   
-   void *context;
-   void *responder;
 
+   //TCP stuff
+   int server_fd;
+   struct sockaddr_in address;
+   int addrlen = sizeof(address);
    int fPort;
 
    int fEventSize;
@@ -703,8 +702,21 @@ public:
       fPortRangeStart = 13000;
       fPortRangeStop  = 13999;
 
-      context = zmq_ctx_new ();
-      responder = zmq_socket (context, ZMQ_REP);
+      // Creating socket file descriptor 
+      server_fd = socket(AF_INET, SOCK_STREAM, 0);
+      fcntl(server_fd, F_SETFL, O_NONBLOCK);
+
+      if (server_fd==0)
+         exit(1);
+      // Forcefully attaching socket to the port 5555
+      int opt = 1;
+      if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, 
+                                                  &opt, sizeof(opt))) 
+      { 
+         //perror("setsockopt"); 
+         exit(1); 
+      }
+
       fPort=5555;
 
       int period=100;
@@ -740,8 +752,19 @@ public:
       char bind_port[100];
       sprintf(bind_port,"tcp://*:%d",fPort);
       std::cout<<"Binding to: "<<bind_port<<std::endl;
-      int rc=zmq_bind (responder, bind_port);
-      assert (rc==0);
+      //int rc=zmq_bind (responder, bind_port);
+      address.sin_family = AF_INET; 
+      address.sin_addr.s_addr = INADDR_ANY; 
+      address.sin_port = htons( fPort ); 
+
+       // Forcefully attaching socket to the port 5555
+      if (bind(server_fd, (struct sockaddr *)&address,  
+                                 sizeof(address))<0) 
+      { 
+         //perror("bind failed"); 
+         exit(1); 
+      }  
+      //assert (rc==0);
    }
 
    std::string HandleRpc(const char* cmd, const char* args)
@@ -860,7 +883,7 @@ public:
          worker_eq->ZeroStatistics();
          worker_eq->WriteStatistics();
          mfe->RegisterEquipment(worker_eq);
-         feLabVIEWWorker* workerfe = new feLabVIEWWorker(mfe,worker_eq,context);
+         feLabVIEWWorker* workerfe = new feLabVIEWWorker(mfe,worker_eq);
          workerfe->fPort=port;
          mfe->RegisterRpcHandler(workerfe);
          workerfe->Init();
@@ -877,8 +900,25 @@ public:
    {
       //printf("periodic!\n");
       //std::chrono::time_point<std::chrono::system_clock> timer_start=std::chrono::high_resolution_clock::now();
-      
-      int read_status=zmq_recv (responder, fEventBuf, fEventSize, ZMQ_NOBLOCK);
+      std::cout<<"Listening"<<std::endl;
+      if (listen(server_fd, 3) < 0) 
+      { 
+         perror("listen"); 
+         exit(EXIT_FAILURE); 
+      } 
+      std::cout<<"Accept"<<std::endl;
+      int new_socket = accept(server_fd, (struct sockaddr *)&address,  
+                       (socklen_t*)&addrlen);
+      if (new_socket<0) 
+      { 
+         perror("accept"); 
+         //exit(EXIT_FAILURE); 
+         return;
+      }
+      std::cout<<"Read"<<std::endl;
+      int read_status= read( new_socket , fEventBuf, fEventSize); 
+      std::cout<<"Proccess"<<std::endl;
+      //int read_status=zmq_recv (responder, fEventBuf, fEventSize, ZMQ_NOBLOCK);
       
       //No data to read... does quitting cause a memory leak? It seems not (tested with valgrind)
       if (read_status<0)
@@ -901,7 +941,8 @@ public:
             }
          }
          const char* response=AddNewClient(hostname);
-         zmq_send (responder, response, strlen(response), 0);
+         send(new_socket, response, strlen(response), 0 );
+         //zmq_send (responder, response, strlen(response), 0);
          return;
       } else if (strncmp(fEventBuf,"GIVE_ME_ADDRESS",15)==0) {
          char hostname[100];
@@ -931,7 +972,8 @@ public:
          int port=AssignPortForWorker(WorkerNo.first);
          sprintf(log_to_address,"tcp://alphamidastest8:%u",port);
          std::cout<<"SEND DATA TO ADDRESS:"<<log_to_address<<std::endl;
-         zmq_send (responder, log_to_address, strlen(log_to_address), 0);
+         send(new_socket, log_to_address, strlen(log_to_address), 0);
+         //zmq_send (responder, log_to_address, strlen(log_to_address), 0);
          return;
       } else {
          std::cout<<"Unknown message just received: "<<std::endl;
@@ -1059,7 +1101,7 @@ int main(int argc, char* argv[])
    }
    else
    {
-      feLabVIEWWorker* myfe = new feLabVIEWWorker(mfe,eq, zmq_ctx_new ());
+      feLabVIEWWorker* myfe = new feLabVIEWWorker(mfe,eq);
       myfe->fPort=port;
       mfe->RegisterRpcHandler(myfe);
       myfe->Init();
