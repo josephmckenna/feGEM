@@ -709,6 +709,11 @@ public:
       context = zmq_ctx_new ();
       responder = zmq_socket (context, ZMQ_REP);
       fPort=5555;
+
+      int period=100;
+      fEq->fOdbEqCommon->WI("Period",period);
+      fEq->fCommon->Period=period;
+
    }
 
    ~feLabVIEWSupervisor() // dtor
