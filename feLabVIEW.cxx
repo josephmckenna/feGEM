@@ -764,7 +764,7 @@ public:
       fMfe->Msg(MINFO, "HandleEndRun", "End run!");
       fEq->SetStatus("Stopped", "#00FF00");
    }
-   int FindHostInWorkerList(const char* hostname)
+   std::pair<int,bool> FindHostInWorkerList(const char* hostname)
    {
       std::vector<std::string> hostlist;
       fOdbWorkers->RSA("HostName", &hostlist);
@@ -775,12 +775,12 @@ public:
          if (strcmp(hostlist.at(i).c_str(),hostname)==0)
          {
             std::cout<<"Match found!"<<std::endl;
-            return i;
+            return {i,true};
          }
       }
       fOdbWorkers->WSAI("HostName",size,hostname);
       std::cout<<"No Match... return size:"<<size<<std::endl;
-      return size;
+      return {size,false};
    }
    int AssignPortForWorker(uint workerID)
    {
@@ -801,9 +801,9 @@ public:
    {
       std::cout<<"Check list of workers"<<std::endl;
       #if 1
-      int WorkerNo=FindHostInWorkerList(hostname);
-      int port=AssignPortForWorker(WorkerNo);
-      std::cout<<"Assign port "<<port<< " for worker "<<WorkerNo<<std::endl;
+      std::pair<int,bool> WorkerNo=FindHostInWorkerList(hostname);
+      int port=AssignPortForWorker(WorkerNo.first);
+      std::cout<<"Assign port "<<port<< " for worker "<<WorkerNo.first<<std::endl;
       #else
       int port=5556;
       int WorkerNo=0;
@@ -820,7 +820,7 @@ public:
       } else {
          zmq_unbind (pinger, bind_port);
          char command[100];
-         sprintf(command,"./feLabVIEW.exe --client %s --port %u &> test-%u.log",hostname,port,WorkerNo);
+         sprintf(command,"./feLabVIEW.exe --client %s --port %u &> test-%u.log",hostname,port,WorkerNo.first);
          std::cout<<"Running command:" << command<<std::endl;
          ss_system(command);
          zmq_close(pinger);
@@ -882,8 +882,9 @@ public:
          }
          char log_to_address[100];
          //sprintf(log_to_address,"%s","tcp://127.0.0.1:5556");
-         int WorkerNo=FindHostInWorkerList(hostname);
-         int port=AssignPortForWorker(WorkerNo);
+         std::pair<int,bool> WorkerNo=FindHostInWorkerList(hostname);
+         assert(WorkerNo.second=true); //Assert the frontend thread is running
+         int port=AssignPortForWorker(WorkerNo.first);
          sprintf(log_to_address,"tcp://alphamidastest8:%u",port);
          std::cout<<"SEND DATA TO ADDRESS:"<<log_to_address<<std::endl;
          zmq_send (responder, log_to_address, strlen(log_to_address), 0);
