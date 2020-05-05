@@ -270,244 +270,6 @@ public:
    }
 };
 
-
-class feLabVIEWSupervisor :
-   public TMFeRpcHandlerInterface,
-   public  TMFePeriodicHandlerInterface
-{
-public:
-   TMFE* fMfe;
-   TMFeEquipment* fEq;
-   
-   //ZeroMQ stuff
-   
-   void *context;
-   void *responder;
-
-   int fPort;
-
-   int fEventSize;
-   char* fEventBuf;
-
-   MVOdb* fOdbWorkers; 
-  
-   int fPortRangeStart;
-   int fPortRangeStop;
-
-   feLabVIEWSupervisor(TMFE* mfe, TMFeEquipment* eq) // ctor
-   {
-      fMfe = mfe;
-      fEq  = eq;
-      //Default event size ok 10kb, will be overwritten by ODB entry in Init()
-      fEventSize = 10000;
-      fEventBuf  = NULL;
-
-      //So far... limit to 1000 frontend workers...
-      fPortRangeStart = 13000;
-      fPortRangeStop  = 13999;
-
-      context = zmq_ctx_new ();
-      responder = zmq_socket (context, ZMQ_REP);
-      fPort=5555;
-   }
-
-   ~feLabVIEWSupervisor() // dtor
-   {
-      if (fEventBuf) {
-         free(fEventBuf);
-         fEventBuf = NULL;
-      }
-   }
-
-   void Init()
-   {
-
-      fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
-      fEq->fOdbEqSettings->RI("port_range_start",&fPortRangeStart, true);
-      fEq->fOdbEqSettings->RI("port_range_stop",&fPortRangeStop, true);
-      assert(fPort>0);
-      fOdbWorkers=fEq->fOdbEqSettings->Chdir("WorkerList",true);
-      fOdbWorkers->WS("HostName","",32);
-      fOdbWorkers->WU32("DateAdded",0);
-      fOdbWorkers->WU32("Port",0);
-
-      if (fEventBuf) {
-         free(fEventBuf);
-      }
-      fEventBuf = (char*)malloc(fEventSize);
-      char bind_port[100];
-      sprintf(bind_port,"tcp://*:%d",fPort);
-      std::cout<<"Binding to: "<<bind_port<<std::endl;
-      int rc=zmq_bind (responder, bind_port);
-      assert (rc==0);
-   }
-
-   std::string HandleRpc(const char* cmd, const char* args)
-   {
-      fMfe->Msg(MINFO, "HandleRpc", "RPC cmd [%s], args [%s]", cmd, args);
-      return "OK";
-   }
-
-   void HandleBeginRun()
-   {
-      fMfe->Msg(MINFO, "HandleBeginRun", "Begin run!");
-      fEq->SetStatus("Running", "#00FF00");
-   }
-
-   void HandleEndRun()
-   {
-      fMfe->Msg(MINFO, "HandleEndRun", "End run!");
-      fEq->SetStatus("Stopped", "#00FF00");
-   }
-   int FindHostInWorkerList(const char* hostname)
-   {
-      std::vector<std::string> hostlist;
-      fOdbWorkers->RSA("HostName", &hostlist);
-      int size=hostlist.size();
-      for (int i=0; i<size; i++)
-      {
-         std::cout<<i<<":"<<hostlist.at(i).c_str()<<std::endl;
-         if (strcmp(hostlist.at(i).c_str(),hostname)==0)
-         {
-            std::cout<<"Match found!"<<std::endl;
-            return i;
-         }
-      }
-      fOdbWorkers->WSAI("HostName",size,hostname);
-      std::cout<<"No Match... return size:"<<size<<std::endl;
-      return size;
-   }
-   int AssignPortForWorker(uint workerID)
-   {
-      std::vector<uint32_t> list;
-      fOdbWorkers->RU32A("Port", &list);
-      if (workerID>=list.size())
-      {
-         int port=fPort+workerID+1;
-         fOdbWorkers->WU32AI("Port",workerID,port);
-         return port;
-      }
-      else
-      {
-         return list.at(workerID);
-      }
-   }
-   const char* AddNewClient(const char* hostname)
-   {
-      std::cout<<"Check list of workers"<<std::endl;
-      #if 1
-      int WorkerNo=FindHostInWorkerList(hostname);
-      int port=AssignPortForWorker(WorkerNo);
-      std::cout<<"Assign port "<<port<< " for worker "<<WorkerNo<<std::endl;
-      #else
-      int port=5556;
-      int WorkerNo=0;
-      #endif
-      void *local_context = zmq_ctx_new ();
-      void *pinger = zmq_socket (local_context, ZMQ_REQ);
-      char bind_port[100];
-      sprintf(bind_port,"tcp://*:%d",port);
-      std::cout<<"Binding to: "<<bind_port<<std::endl;
-      int rc=zmq_bind (pinger, bind_port);
-      if (rc!=0)
-      {
-         std::cout<<"Binding failed! The frontend is probably running... wahoo"<<std::endl;
-      } else {
-         zmq_unbind (pinger, bind_port);
-         char command[100];
-         sprintf(command,"./feLabVIEW.exe --client %s --port %u &> test-%u.log",hostname,port,WorkerNo);
-         std::cout<<"Running command:" << command<<std::endl;
-         ss_system(command);
-         zmq_close(pinger);
-         zmq_ctx_destroy(local_context);
-         return "New Frontend started";
-      }
-      return "Frontend already running";
-   }
-   void HandlePeriodic()
-   {
-      printf("periodic!\n");
-      //std::chrono::time_point<std::chrono::system_clock> timer_start=std::chrono::high_resolution_clock::now();
-      
-      int read_status=zmq_recv (responder, fEventBuf, fEventSize, ZMQ_NOBLOCK);
-      
-      //No data to read... does quitting cause a memory leak? It seems not (tested with valgrind)
-      if (read_status<0)
-         return;
-      //We use this as a char array... add terminating character at end of read
-      fEventBuf[read_status]=0;
-      std::cout<<fEventBuf<<std::endl;
-      printf ("Supervisor received (%c%c%c%c)\n",fEventBuf[0],fEventBuf[1],fEventBuf[2],fEventBuf[3]);
-      if (strncmp(fEventBuf,"START_FRONTEND",14)==0)
-      {
-         char hostname[100];
-         sprintf(hostname,"%s",&fEventBuf[15]);
-         //Trim the hostname at the first '.'
-         for (int i=0; i<100; i++)
-         {
-            if (hostname[i]=='.')
-            {
-               hostname[i]=0;
-               break;
-            }
-         }
-         const char* response=AddNewClient(hostname);
-         zmq_send (responder, response, strlen(response), 0);
-         return;
-      } else if (strncmp(fEventBuf,"GIVE_ME_ADDRESS",15)==0) {
-         char hostname[100];
-         sprintf(hostname,"%s",&fEventBuf[16]);
-         //Trim the hostname at the first '.'
-         for (int i=0; i<100; i++)
-         {
-            if (hostname[i]=='.')
-            {
-               hostname[i]=0;
-               break;
-            }
-         }
-         std::cout<<hostname<<std::endl;
-         for (int i=0; i<100; i++)
-         {
-            if (hostname[i]=='.')
-            {
-               hostname[i]=0;
-               break;
-            }
-         }
-         char log_to_address[100];
-         //sprintf(log_to_address,"%s","tcp://127.0.0.1:5556");
-         int WorkerNo=FindHostInWorkerList(hostname);
-         int port=AssignPortForWorker(WorkerNo);
-         sprintf(log_to_address,"tcp://alphamidastest8:%u",port);
-         std::cout<<"SEND DATA TO ADDRESS:"<<log_to_address<<std::endl;
-         zmq_send (responder, log_to_address, strlen(log_to_address), 0);
-         return;
-      } else {
-         std::cout<<"Unknown message just received: "<<std::endl;
-         for (int i=0;i<50; i++)
-            std::cout<<fEventBuf[i];
-         exit(1);
-      }
-/*      std::chrono::time_point<std::chrono::system_clock> timer_stop=std::chrono::high_resolution_clock::now();
-      std::chrono::duration<double> handlingtime=timer_stop - timer_start;
-      std::cout<<"Handling time: "<<handlingtime.count()<<std::endl;
-      if (error)
-      {
-         zmq_send (responder, error, strlen(error), 0);
-         fMfe->Msg(MTALK, "feLabVIEW", error);
-         exit(1);
-      }
-      else
-      {
-         char message[100];
-         sprintf(message,"DATA OK (Processed in %fms)",1000*handlingtime.count());
-         zmq_send (responder, message, strlen(message), 0);
-      }*/
-      return;
-   }
-};
-
 class PeriodicityManager
 {
    private:
@@ -896,6 +658,243 @@ public:
       zmq_send (responder, reply.c_str(), reply.size(), 0);
       if (KillFrontend)
          exit(1);
+      return;
+   }
+};
+
+class feLabVIEWSupervisor :
+   public TMFeRpcHandlerInterface,
+   public  TMFePeriodicHandlerInterface
+{
+public:
+   TMFE* fMfe;
+   TMFeEquipment* fEq;
+   
+   //ZeroMQ stuff
+   
+   void *context;
+   void *responder;
+
+   int fPort;
+
+   int fEventSize;
+   char* fEventBuf;
+
+   MVOdb* fOdbWorkers; 
+  
+   int fPortRangeStart;
+   int fPortRangeStop;
+
+   feLabVIEWSupervisor(TMFE* mfe, TMFeEquipment* eq) // ctor
+   {
+      fMfe = mfe;
+      fEq  = eq;
+      //Default event size ok 10kb, will be overwritten by ODB entry in Init()
+      fEventSize = 10000;
+      fEventBuf  = NULL;
+
+      //So far... limit to 1000 frontend workers...
+      fPortRangeStart = 13000;
+      fPortRangeStop  = 13999;
+
+      context = zmq_ctx_new ();
+      responder = zmq_socket (context, ZMQ_REP);
+      fPort=5555;
+   }
+
+   ~feLabVIEWSupervisor() // dtor
+   {
+      if (fEventBuf) {
+         free(fEventBuf);
+         fEventBuf = NULL;
+      }
+   }
+
+   void Init()
+   {
+
+      fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
+      fEq->fOdbEqSettings->RI("port_range_start",&fPortRangeStart, true);
+      fEq->fOdbEqSettings->RI("port_range_stop",&fPortRangeStop, true);
+      assert(fPort>0);
+      fOdbWorkers=fEq->fOdbEqSettings->Chdir("WorkerList",true);
+      fOdbWorkers->WS("HostName","",32);
+      fOdbWorkers->WU32("DateAdded",0);
+      fOdbWorkers->WU32("Port",0);
+
+      if (fEventBuf) {
+         free(fEventBuf);
+      }
+      fEventBuf = (char*)malloc(fEventSize);
+      char bind_port[100];
+      sprintf(bind_port,"tcp://*:%d",fPort);
+      std::cout<<"Binding to: "<<bind_port<<std::endl;
+      int rc=zmq_bind (responder, bind_port);
+      assert (rc==0);
+   }
+
+   std::string HandleRpc(const char* cmd, const char* args)
+   {
+      fMfe->Msg(MINFO, "HandleRpc", "RPC cmd [%s], args [%s]", cmd, args);
+      return "OK";
+   }
+
+   void HandleBeginRun()
+   {
+      fMfe->Msg(MINFO, "HandleBeginRun", "Begin run!");
+      fEq->SetStatus("Running", "#00FF00");
+   }
+
+   void HandleEndRun()
+   {
+      fMfe->Msg(MINFO, "HandleEndRun", "End run!");
+      fEq->SetStatus("Stopped", "#00FF00");
+   }
+   int FindHostInWorkerList(const char* hostname)
+   {
+      std::vector<std::string> hostlist;
+      fOdbWorkers->RSA("HostName", &hostlist);
+      int size=hostlist.size();
+      for (int i=0; i<size; i++)
+      {
+         std::cout<<i<<":"<<hostlist.at(i).c_str()<<std::endl;
+         if (strcmp(hostlist.at(i).c_str(),hostname)==0)
+         {
+            std::cout<<"Match found!"<<std::endl;
+            return i;
+         }
+      }
+      fOdbWorkers->WSAI("HostName",size,hostname);
+      std::cout<<"No Match... return size:"<<size<<std::endl;
+      return size;
+   }
+   int AssignPortForWorker(uint workerID)
+   {
+      std::vector<uint32_t> list;
+      fOdbWorkers->RU32A("Port", &list);
+      if (workerID>=list.size())
+      {
+         int port=fPort+workerID+1;
+         fOdbWorkers->WU32AI("Port",workerID,port);
+         return port;
+      }
+      else
+      {
+         return list.at(workerID);
+      }
+   }
+   const char* AddNewClient(const char* hostname)
+   {
+      std::cout<<"Check list of workers"<<std::endl;
+      #if 1
+      int WorkerNo=FindHostInWorkerList(hostname);
+      int port=AssignPortForWorker(WorkerNo);
+      std::cout<<"Assign port "<<port<< " for worker "<<WorkerNo<<std::endl;
+      #else
+      int port=5556;
+      int WorkerNo=0;
+      #endif
+      void *local_context = zmq_ctx_new ();
+      void *pinger = zmq_socket (local_context, ZMQ_REQ);
+      char bind_port[100];
+      sprintf(bind_port,"tcp://*:%d",port);
+      std::cout<<"Binding to: "<<bind_port<<std::endl;
+      int rc=zmq_bind (pinger, bind_port);
+      if (rc!=0)
+      {
+         std::cout<<"Binding failed! The frontend is probably running... wahoo"<<std::endl;
+      } else {
+         zmq_unbind (pinger, bind_port);
+         char command[100];
+         sprintf(command,"./feLabVIEW.exe --client %s --port %u &> test-%u.log",hostname,port,WorkerNo);
+         std::cout<<"Running command:" << command<<std::endl;
+         ss_system(command);
+         zmq_close(pinger);
+         zmq_ctx_destroy(local_context);
+         return "New Frontend started";
+      }
+      return "Frontend already running";
+   }
+   void HandlePeriodic()
+   {
+      printf("periodic!\n");
+      //std::chrono::time_point<std::chrono::system_clock> timer_start=std::chrono::high_resolution_clock::now();
+      
+      int read_status=zmq_recv (responder, fEventBuf, fEventSize, ZMQ_NOBLOCK);
+      
+      //No data to read... does quitting cause a memory leak? It seems not (tested with valgrind)
+      if (read_status<0)
+         return;
+      //We use this as a char array... add terminating character at end of read
+      fEventBuf[read_status]=0;
+      std::cout<<fEventBuf<<std::endl;
+      printf ("Supervisor received (%c%c%c%c)\n",fEventBuf[0],fEventBuf[1],fEventBuf[2],fEventBuf[3]);
+      if (strncmp(fEventBuf,"START_FRONTEND",14)==0)
+      {
+         char hostname[100];
+         sprintf(hostname,"%s",&fEventBuf[15]);
+         //Trim the hostname at the first '.'
+         for (int i=0; i<100; i++)
+         {
+            if (hostname[i]=='.')
+            {
+               hostname[i]=0;
+               break;
+            }
+         }
+         const char* response=AddNewClient(hostname);
+         zmq_send (responder, response, strlen(response), 0);
+         return;
+      } else if (strncmp(fEventBuf,"GIVE_ME_ADDRESS",15)==0) {
+         char hostname[100];
+         sprintf(hostname,"%s",&fEventBuf[16]);
+         //Trim the hostname at the first '.'
+         for (int i=0; i<100; i++)
+         {
+            if (hostname[i]=='.')
+            {
+               hostname[i]=0;
+               break;
+            }
+         }
+         std::cout<<hostname<<std::endl;
+         for (int i=0; i<100; i++)
+         {
+            if (hostname[i]=='.')
+            {
+               hostname[i]=0;
+               break;
+            }
+         }
+         char log_to_address[100];
+         //sprintf(log_to_address,"%s","tcp://127.0.0.1:5556");
+         int WorkerNo=FindHostInWorkerList(hostname);
+         int port=AssignPortForWorker(WorkerNo);
+         sprintf(log_to_address,"tcp://alphamidastest8:%u",port);
+         std::cout<<"SEND DATA TO ADDRESS:"<<log_to_address<<std::endl;
+         zmq_send (responder, log_to_address, strlen(log_to_address), 0);
+         return;
+      } else {
+         std::cout<<"Unknown message just received: "<<std::endl;
+         for (int i=0;i<50; i++)
+            std::cout<<fEventBuf[i];
+         exit(1);
+      }
+/*      std::chrono::time_point<std::chrono::system_clock> timer_stop=std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double> handlingtime=timer_stop - timer_start;
+      std::cout<<"Handling time: "<<handlingtime.count()<<std::endl;
+      if (error)
+      {
+         zmq_send (responder, error, strlen(error), 0);
+         fMfe->Msg(MTALK, "feLabVIEW", error);
+         exit(1);
+      }
+      else
+      {
+         char message[100];
+         sprintf(message,"DATA OK (Processed in %fms)",1000*handlingtime.count());
+         zmq_send (responder, message, strlen(message), 0);
+      }*/
       return;
    }
 };
