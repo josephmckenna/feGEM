@@ -334,6 +334,12 @@ class PeriodicityManager
                      "feLabVIEW", "%s periodic tasks are very busy... miss use of the LabVIEW library?",
                      fMfe->fFrontendName.c_str()
                      );
+            fMfe->Msg(MINFO,
+                     "feLabVIEW",
+                     "Estimated connections:  %d periodics with data /  %d periodics without  > %d fNumberOfConnections",
+                     fPeriodicWithData,
+                     fPeriodicWithoutData,
+                     fNumberOfConnections);
          }
          if ( EstimatedConnections < fNumberOfConnections*(1-tolerance) )
          {
@@ -359,8 +365,8 @@ class PeriodicityManager
    void ProcessMessage(LVBANK<char>* bank)
    {
       //std::cout<<(char*)&(bank->DATA[0].DATA)<<std::endl;
-      if ((strncmp((char*)&(bank->DATA[0].DATA),"New labview connection from",27)==0) ||
-          (strncmp((char*)&(bank->DATA[0].DATA),"New python connection from",26)==0))
+      if ((strncmp((char*)&(bank->DATA->DATA),"New labview connection from",27)==0) ||
+          (strncmp((char*)&(bank->DATA->DATA),"New python connection from",26)==0))
       {
          char ProgramName[100];
          snprintf(ProgramName,bank->BlockSize-16,"%s",(char*)&(bank->DATA[0].DATA));
@@ -507,8 +513,7 @@ public:
          {
             bank->print();
             fMfe->Msg(MTALK, "feLabVIEW", (char*)bank->DATA->DATA);
-            if ((strncmp(bank->NAME.VARCATEGORY,"LVSYSMON",8)==0) ||
-                (strncmp(bank->NAME.VARCATEGORY,"PYSYSMON",8)==0) )
+            if (strncmp(bank->NAME.VARCATEGORY,"THISHOST",8)==0)
             {
                periodicity.ProcessMessage(bank);
             }
@@ -553,7 +558,8 @@ public:
       if (array->GetTotalSize() > (uint32_t)fEventSize)
       {
          char error[100];
-         sprintf(error,"ERROR: More bytes sent (%u) than MIDAS has assiged for buffer (%u)",
+         sprintf(error,"ERROR: [%s] More bytes sent (%u) than MIDAS has assiged for buffer (%u)",
+                        fEq->fName.c_str(),
                         array->BlockSize + array->GetHeaderSize(),
                         fEventSize);
          message.QueueError(error);
@@ -577,7 +583,8 @@ public:
       if (ThisBank->BlockSize+ThisBank->GetHeaderSize() > (uint32_t)fEventSize)
       {
          char error[100];
-         sprintf(error,"ERROR: More bytes sent (%u) than MIDAS has assiged for buffer (%d)",
+         sprintf(error,"ERROR: [%s] More bytes sent (%u) than MIDAS has assiged for buffer (%d)",
+                        fEq->fName.c_str(),
                         ThisBank->GetTotalSize(),
                         fEventSize);
          message.QueueError(error);
@@ -589,7 +596,7 @@ public:
 
    void HandlePeriodic()
    {
-      printf("periodic!\n");
+      //printf("periodic!\n");
       std::chrono::time_point<std::chrono::system_clock> timer_start=std::chrono::high_resolution_clock::now();
       //char buf[256];
       //sprintf(buf, "buffered %d (max %d), dropped %d, unknown %d, max flushed %d", gUdpPacketBufSize, fMaxBuffered, fCountDroppedPackets, fCountUnknownPackets, fMaxFlushed);
@@ -617,18 +624,18 @@ public:
       }
 
       int BankSize=0;
-      printf ("Received (%c%c%c%c)\n",ptr[0],ptr[1],ptr[2],ptr[3]);
+      //printf ("[%s] Received %c%c%c%c (%d bytes)",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],read_status);
       if (strncmp(ptr,"PING",4)==0) {
          std::cout<<"PING!!!"<<std::endl;
          zmq_send(responder, "PONG", 4, 0);
          return;
       } else if (strncmp(ptr,"PYA1",4)==0 || strncmp(ptr,"LVA1",4)==0) {
-         std::cout<<"Python / LabVIEW Bank Array found!"<<std::endl;
+         //std::cout<<"["<<fEq->fName.c_str()<<"] Python / LabVIEW Bank Array found!"<<std::endl;
          LVBANKARRAY* bank=(LVBANKARRAY*)ptr;
          BankSize=bank->GetTotalSize();
          HandleBankArray(ptr);
       } else if (strncmp(ptr,"PYB1",4)==0 || strncmp(ptr,"LVB1",4)==0 ) {
-         std::cout<<"Python / LabVIEW Bank found!"<<std::endl;
+         //std::cout<<"["<<fEq->fName.c_str()<<"] Python / LabVIEW Bank found!"<<std::endl;
          LVBANK<void*>* bank=(LVBANK<void*>*)ptr;
          BankSize=bank->GetTotalSize();
          HandleBank(ptr);
@@ -638,7 +645,7 @@ public:
             zmq_send(responder, message, strlen(message), 0);
             return;
       } else {
-         std::cout<<"Unknown data type just received... "<<std::endl;
+         std::cout<<"["<<fEq->fName.c_str()<<"] Unknown data type just received... "<<std::endl;
          message.QueueError("Unknown data type just received... ");
          for (int i=0; i<20; i++)
             std::cout<<ptr[i];
@@ -648,7 +655,9 @@ public:
       fEq->SendEvent(fEventBuf);
       std::chrono::time_point<std::chrono::system_clock> timer_stop=std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> handlingtime=timer_stop - timer_start;
-      std::cout<<"Handling time: "<<handlingtime.count()<<std::endl;
+      //std::cout<<"["<<fEq->fName.c_str()<<"] Handling time: "<<handlingtime.count()*1000 <<"ms"<<std::endl;
+      printf ("[%s] Handled %c%c%c%c (%d bytes) in %fms\n",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],read_status,handlingtime.count()*1000);
+      
       char buf[100];
       sprintf(buf,"DATA OK (Processed in %fms)",1000*handlingtime.count());
       message.QueueMessage(buf);
@@ -817,7 +826,7 @@ public:
    }
    void HandlePeriodic()
    {
-      printf("periodic!\n");
+      //printf("periodic!\n");
       //std::chrono::time_point<std::chrono::system_clock> timer_start=std::chrono::high_resolution_clock::now();
       
       int read_status=zmq_recv (responder, fEventBuf, fEventSize, ZMQ_NOBLOCK);
@@ -828,7 +837,7 @@ public:
       //We use this as a char array... add terminating character at end of read
       fEventBuf[read_status]=0;
       std::cout<<fEventBuf<<std::endl;
-      printf ("Supervisor received (%c%c%c%c)\n",fEventBuf[0],fEventBuf[1],fEventBuf[2],fEventBuf[3]);
+      printf ("[%s] Supervisor received (%c%c%c%c)\n",fEq->fName.c_str(),fEventBuf[0],fEventBuf[1],fEventBuf[2],fEventBuf[3]);
       if (strncmp(fEventBuf,"START_FRONTEND",14)==0)
       {
          char hostname[100];
