@@ -385,15 +385,17 @@ public:
    TMFE* fMfe;
    TMFeEquipment* fEq;
    
-   //ZeroMQ stuff
-   
-   void *responder;
-
+   //TCP stuff
+   int server_fd;
+   struct sockaddr_in address;
+   int addrlen = sizeof(address);
    int fPort;
 
    int fEventSize;
+   int lastEventSize; //Used to monitor any changes to fEventSize
    char* fEventBuf;
 
+   //Periodic task query items
    RunStatusType RunStatus;
    int RUNNO;
 
@@ -409,14 +411,27 @@ public:
       fEventSize = 10000;
       fEventBuf  = NULL;
 
-      //responder = zmq_socket (context, ZMQ_REP);
+      // Creating socket file descriptor 
+      server_fd = socket(AF_INET, SOCK_STREAM, 0);
+      fcntl(server_fd, F_SETFL, O_NONBLOCK);
+
+      if (server_fd==0)
+         exit(1);
+      // Forcefully attaching socket to the port 5555
+      int opt = 1;
+      if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, 
+                                                  &opt, sizeof(opt))) 
+      { 
+         //perror("setsockopt"); 
+         exit(1); 
+      }
 
       RunStatus=Unknown;
       RUNNO=-1;
       fMfe->fOdbRoot->RI("Runinfo/Run number", &RUNNO);
-      int period=1000;
-      fEq->fOdbEqCommon->RI("Period",&period);
-      eq->fCommon->Period=period;
+      //int period=1000;
+      //fEq->fOdbEqCommon->RI("Period",&period);
+      //fEq->fCommon->Period=period;
    }
 
    ~feLabVIEWWorker() // dtor
@@ -432,6 +447,7 @@ public:
    void Init()
    {
       fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
+      lastEventSize=fEventSize;
       fEq->fOdbEqSettings->WS("feVariables","No variables logged yet...",32);
       fEq->fOdbEqSettings->WU32("DateAdded",0);
       assert(fPort>0);
@@ -442,8 +458,19 @@ public:
       char bind_port[100];
       sprintf(bind_port,"tcp://*:%d",fPort);
       std::cout<<"Binding to: "<<bind_port<<std::endl;
-      int rc=zmq_bind (responder, bind_port);
-      assert (rc==0);
+      //int rc=zmq_bind (responder, bind_port);
+      address.sin_family = AF_INET; 
+      address.sin_addr.s_addr = INADDR_ANY; 
+      address.sin_port = htons( fPort ); 
+
+       // Forcefully attaching socket to the port fPort
+      if (bind(server_fd, (struct sockaddr *)&address,  
+                                 sizeof(address))<0) 
+      { 
+         //perror("bind failed"); 
+         exit(1); 
+      }
+      //assert (rc==0);
    }
 
    std::string HandleRpc(const char* cmd, const char* args)
@@ -504,6 +531,7 @@ public:
       } else if (strncmp(ThisBank->NAME.DATATYPE,"U8",2)==0) {
          LVBANK<uint8_t>* bank=(LVBANK<uint8_t>*)buf;
          logger.Update(bank);*/
+      
       } else if (strncmp(ThisBank->NAME.DATATYPE,"STR",3)==0) {
          LVBANK<char>* bank=(LVBANK<char>*)buf;
          if (strncmp(bank->NAME.VARNAME,"TALK",4)==0)
@@ -524,7 +552,8 @@ public:
             message.QueueData(buf);
             return;
          }
-         else if (strncmp(bank->NAME.VARNAME,"GET_STATUS",10)==0) {
+         else if (strncmp(bank->NAME.VARNAME,"GET_STATUS",10)==0)
+         {
             char buf[20];
             switch (RunStatus)
             {
@@ -539,7 +568,22 @@ public:
                   message.QueueData(buf);
             }
             return;
-      }
+         }
+         else if (strncmp(bank->NAME.VARNAME,"GET_EVENT_SIZE",14)==0)
+         {
+            char buf[20]={0};
+            //JSON format already
+            sprintf(buf,"EventSize:%d",fEventSize);
+            message.QueueData(buf);
+            return;
+         }
+         else if (strncmp(bank->NAME.VARNAME,"SET_EVENT_SIZE",14)==0)
+         {
+            fEventSize=atoi((char*)&bank->DATA->DATA[15]);
+            fEq->fOdbEqSettings->WI("event_size", fEventSize);
+            std::cout<<"Event size updated to:"<<fEventSize<<std::endl;
+            return;
+         }
          logger.Update(bank);
       } else {
          std::cout<<"Unknown bank data type... "<<std::endl;
@@ -599,17 +643,56 @@ public:
       //sprintf(buf, "buffered %d (max %d), dropped %d, unknown %d, max flushed %d", gUdpPacketBufSize, fMaxBuffered, fCountDroppedPackets, fCountUnknownPackets, fMaxFlushed);
       //fEq->SetStatus(buf, "#00FF00");
 
-
+      if (lastEventSize!=fEventSize)
+      {
+         std::cout<<"fEventSize updated! Flushing buffer"<<std::endl;
+            if (fEventBuf) {
+               free(fEventBuf);
+            }
+            fEventBuf = (char*)malloc(fEventSize);
+            std::cout<<"Event buffer re-initialised "<<std::endl;
+      }
+      lastEventSize=fEventSize;
+      if (listen(server_fd, 3) < 0) 
+      { 
+         perror("listen"); 
+         exit(EXIT_FAILURE); 
+      } 
+      //std::cout<<"Accept"<<std::endl;
+      int new_socket = accept(server_fd, (struct sockaddr *)&address,  
+                       (socklen_t*)&addrlen);
+      if (new_socket<0) 
+      { 
+         //perror("accept"); 
+         //exit(EXIT_FAILURE); 
+         return;
+      }
+      //Make sure header memory is clean
+      ((LVBANKARRAY*)fEventBuf)->ClearHeader();
+      ((LVBANK<void*>*)fEventBuf)->ClearHeader();
+      //Prepare the MIDAS bank so that we can directly write into from the TCP buffer
       fEq->ComposeEvent(fEventBuf, fEventSize);
       fEq->BkInit(fEventBuf, fEventSize);
-      // ZeroMQ directly puts the data inside the data bank (aimed minimise copy operations)
-      // there for we must define the MIDAS Bankname now, not after we know if its a LabVIEW
+      // We place the data inside the data bank (aimed minimise move/copy operations for speed)
+      // therefor we must define the MIDAS Bankname now, not after we know if its a LabVIEW
       // bank or LabVIEW Array LVB1 or LVA1
       char* ptr = (char*) fEq->BkOpen(fEventBuf, "LVD1", TID_STRUCT);
+      int read_status=0;
+      int position=0;
 
-      int read_status=zmq_recv (responder, ptr, fEventSize, ZMQ_NOBLOCK);
-      //No data to read... does quitting cause a memory leak? It seems not (tested with valgrind)
-      if (read_status<0)
+      int BankSize=-1;
+      // Get the first chunk of the message (must be atleast the header of the data coming)
+      // The header of a LVBANK is 88 bytes
+      // The header of a LVBANKARRAY is 32 bytes
+      // So... the minimum data we need for GetTotalSize() to work is 88 bytes
+      while (read_status<88)
+      {
+         read_status= read( new_socket , ptr+position, fEventSize-position);
+         position+=read_status;
+         if (!position) break; //Nothing to read... 
+      }
+      // No data to read... does quitting cause a memory leak? It seems not (tested with valgrind)
+      if (read_status<=0)
       {
          periodicity.LogPeriodicWithoutData();
          return;
@@ -619,28 +702,49 @@ public:
          fEq->WriteStatistics();
          periodicity.LogPeriodicWithData();
       }
-
-      int BankSize=0;
-      //printf ("[%s] Received %c%c%c%c (%d bytes)",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],read_status);
+      //Read a full LVBANKARRAY
+      if (strncmp(ptr,"PYA1",4)==0 || strncmp(ptr,"LVA1",4)==0)
+      {
+         LVBANKARRAY* bank=(LVBANKARRAY*)ptr;
+         BankSize=bank->GetTotalSize();
+         while (read_status<BankSize)
+         {
+            read_status= read( new_socket , ptr+position, BankSize-position);
+            if (!read_status) break;
+            position+=read_status;
+         }
+         assert(BankSize==position);
+         read_status=position;
+      }
+      //Read a full LVBANK
+      else if (strncmp(ptr,"PYB1",4)==0 || strncmp(ptr,"LVB1",4)==0)
+      {
+         LVBANK<void*>* bank=(LVBANK<void*>*)ptr;
+         BankSize=bank->GetTotalSize();
+         while (read_status<BankSize)
+         {
+            read_status= read( new_socket , ptr+position, BankSize-position);
+            position+=read_status;
+            if (!read_status) break;
+         }
+         assert(BankSize==position);
+         read_status=position;
+      }
+      
+      //Process what we have read into the MIDAS bank
+      printf ("[%s] Received %c%c%c%c (%d bytes)",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],read_status);
       if (strncmp(ptr,"PING",4)==0) {
          std::cout<<"PING!!!"<<std::endl;
-         zmq_send(responder, "PONG", 4, 0);
+         send(new_socket, "PONG", 4, 0 );
+         close(new_socket);
+         //zmq_send(responder, "PONG", 4, 0);
          return;
       } else if (strncmp(ptr,"PYA1",4)==0 || strncmp(ptr,"LVA1",4)==0) {
          //std::cout<<"["<<fEq->fName.c_str()<<"] Python / LabVIEW Bank Array found!"<<std::endl;
-         LVBANKARRAY* bank=(LVBANKARRAY*)ptr;
-         BankSize=bank->GetTotalSize();
-         HandleBankArray(ptr);
+         HandleBankArray(ptr); //Iterates over array with HandleBank()
       } else if (strncmp(ptr,"PYB1",4)==0 || strncmp(ptr,"LVB1",4)==0 ) {
          //std::cout<<"["<<fEq->fName.c_str()<<"] Python / LabVIEW Bank found!"<<std::endl;
-         LVBANK<void*>* bank=(LVBANK<void*>*)ptr;
-         BankSize=bank->GetTotalSize();
          HandleBank(ptr);
-      } else if (strncmp(ptr,"GIVE_ME_EVENT_SIZE",18)==0) {
-            char message[32]={0};
-            sprintf(message,"[\"EventSize:%d\"]",fEventSize);
-            zmq_send(responder, message, strlen(message), 0);
-            return;
       } else {
          std::cout<<"["<<fEq->fName.c_str()<<"] Unknown data type just received... "<<std::endl;
          message.QueueError("Unknown data type just received... ");
@@ -661,7 +765,9 @@ public:
 
       bool KillFrontend=message.HaveErrors();
       std::string reply=message.ReadMessageQueue();
-      zmq_send (responder, reply.c_str(), reply.size(), 0);
+      send(new_socket, reply.c_str(), reply.size(), 0 );
+      close(new_socket);
+      //zmq_send (responder, reply.c_str(), reply.size(), 0);
       if (KillFrontend)
          exit(1);
       return;
@@ -719,7 +825,7 @@ public:
 
       fPort=5555;
 
-      int period=100;
+      int period=10;
       fEq->fOdbEqCommon->WI("Period",period);
       fEq->fCommon->Period=period;
 
@@ -856,8 +962,8 @@ public:
          name+="LV_";
          name+=hostname;
 
-         TMFE* mfe = TMFE::Instance();
-         //TMFE* mfe=fMfe;
+         //TMFE* mfe = TMFE::Instance();
+         TMFE* mfe=fMfe;
          if (name.size()>31)
          {
             mfe->Msg(MERROR, "feLabVIEW", "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
@@ -889,39 +995,35 @@ public:
          workerfe->Init();
          mfe->RegisterPeriodicHandler(worker_eq, workerfe);
 
-         mfe->StartRpcThread();
-         mfe->StartPeriodicThread();
+         //mfe->StartRpcThread();
+         //mfe->StartPeriodicThread();
          worker_eq->SetStatus("Started", "white");
-         return "New Frontend started";
+         return "[\"New Frontend started\"]";
       }
-      return "Frontend already running";
+      return "[\"Frontend already running\"]";
    }
    void HandlePeriodic()
    {
       //printf("periodic!\n");
       //std::chrono::time_point<std::chrono::system_clock> timer_start=std::chrono::high_resolution_clock::now();
-      std::cout<<"Listening"<<std::endl;
       if (listen(server_fd, 3) < 0) 
       { 
          perror("listen"); 
          exit(EXIT_FAILURE); 
       } 
-      std::cout<<"Accept"<<std::endl;
       int new_socket = accept(server_fd, (struct sockaddr *)&address,  
                        (socklen_t*)&addrlen);
       if (new_socket<0) 
       { 
-         perror("accept"); 
+         //perror("accept"); 
          //exit(EXIT_FAILURE); 
          return;
       }
-      std::cout<<"Read"<<std::endl;
       int read_status= read( new_socket , fEventBuf, fEventSize); 
-      std::cout<<"Proccess"<<std::endl;
       //int read_status=zmq_recv (responder, fEventBuf, fEventSize, ZMQ_NOBLOCK);
-      
+      //std::cout<<"READ STATUS:"<<read_status<<std::endl;
       //No data to read... does quitting cause a memory leak? It seems not (tested with valgrind)
-      if (read_status<0)
+      if (read_status<=0)
          return;
       //We use this as a char array... add terminating character at end of read
       fEventBuf[read_status]=0;
@@ -942,11 +1044,22 @@ public:
          }
          const char* response=AddNewClient(hostname);
          send(new_socket, response, strlen(response), 0 );
+         shutdown(new_socket,SHUT_RD);
+         close(new_socket);
          //zmq_send (responder, response, strlen(response), 0);
          return;
       } else if (strncmp(fEventBuf,"GIVE_ME_ADDRESS",15)==0) {
+         char log_to_address[100];
+         sprintf(log_to_address,"[\"SendToAddress:alphamidastest8\"]");
+         std::cout<<"SEND DATA TO ADDRESS:"<<log_to_address<<std::endl;
+         send(new_socket, log_to_address, strlen(log_to_address), 0);
+         shutdown(new_socket,SHUT_RD);
+         close(new_socket);
+         //zmq_send (responder, log_to_address, strlen(log_to_address), 0);
+         return;
+      } else if (strncmp(fEventBuf,"GIVE_ME_PORT",12)==0) {
          char hostname[100];
-         sprintf(hostname,"%s",&fEventBuf[16]);
+         sprintf(hostname,"%s",&fEventBuf[13]);
          //Trim the hostname at the first '.'
          for (int i=0; i<100; i++)
          {
@@ -965,15 +1078,15 @@ public:
                break;
             }
          }
-         char log_to_address[100];
-         //sprintf(log_to_address,"%s","tcp://127.0.0.1:5556");
          std::pair<int,bool> WorkerNo=FindHostInWorkerList(hostname);
          assert(WorkerNo.second=true); //Assert the frontend thread is running
          int port=AssignPortForWorker(WorkerNo.first);
-         sprintf(log_to_address,"tcp://alphamidastest8:%u",port);
-         std::cout<<"SEND DATA TO ADDRESS:"<<log_to_address<<std::endl;
-         send(new_socket, log_to_address, strlen(log_to_address), 0);
-         //zmq_send (responder, log_to_address, strlen(log_to_address), 0);
+         char log_to_port[80];
+         sprintf(log_to_port,"[\"SendToPort:%u\"]",port);
+         std::cout<<"SEND TO PORT:"<<port<<std::endl;
+         send(new_socket, log_to_port, strlen(log_to_port), 0);
+         shutdown(new_socket,SHUT_RD);
+         close(new_socket);
          return;
       } else {
          std::cout<<"Unknown message just received: "<<std::endl;

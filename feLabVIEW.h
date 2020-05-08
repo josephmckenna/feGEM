@@ -69,13 +69,26 @@ struct LVDATA {
    {
       return (size-GetHeaderSize())/sizeof(T);
    }
-   void print(uint32_t size, bool LittleEndian)
+   void print(uint32_t size, bool LittleEndian, bool IsString=false)
    {
       std::cout<<"   Coarse Time:"<<GetLabVIEWCoarseTime()<<std::endl;
       std::cout<<"   Unix Time:"<<GetUnixTimestamp()<<std::endl;;
       std::cout<<"   Fine Time:"<<GetLabVIEWFineTime()<<std::endl;
       uint32_t data_points=GetEntries(size);
       std::cout<<"   size:"<<data_points<<std::endl;
+      if (IsString)
+      {
+         std::cout<<"DATA:";
+         for (int i=0; i<data_points; i++)
+         {
+            if (DATA[i])
+               std::cout<<DATA[i];
+            else
+               std::cout<<"NULL";
+         }
+         std::cout<<std::endl;
+         return;
+      }
       if (LittleEndian)
          for (int i=0; i<data_points; i++)
             if (DATA[i])
@@ -125,7 +138,7 @@ struct LVBANK {
    uint32_t BlockSize;
    uint32_t NumberOfEntries;
    LVDATA<T> DATA[];
-   void print() const
+   void printheader() const
    {
       NAME.print();
       std::cout<<"  EquipmentType:"<<EquipmentType<<std::endl;
@@ -133,11 +146,18 @@ struct LVBANK {
       std::cout<<"  DataEndianess:"<<DataEndianess<<std::endl;
       std::cout<<"  BlockSize:"<<BlockSize<<std::endl;
       std::cout<<"  NumberOfEntries:"<<NumberOfEntries<<std::endl;
+   }
+   void print() const
+   {
+      printheader();
+      bool IsString=false;
+      if (strncmp(NAME.DATATYPE,"STR",3)==0)
+         IsString=true;
       for (int i=0; i<NumberOfEntries; i++)
       {
          char* buf=(char*)&DATA;
          LVDATA<T>* data=(LVDATA<T>*)buf;
-         data->print(BlockSize, (DataEndianess==LVEndianess::LittleEndian));
+         data->print(BlockSize, (DataEndianess==LVEndianess::LittleEndian),IsString);
          buf+=BlockSize;
       }
    }
@@ -162,6 +182,19 @@ struct LVBANK {
    {
       return GetHeaderSize()+BlockSize*NumberOfEntries;
    }
+   void ClearHeader()
+   {
+      //Char arrays are NULL terminated... so NULL the first character
+      NAME.BANK[0]=0;
+      NAME.DATATYPE[0]=0;
+      NAME.VARCATEGORY[0]=0;
+      NAME.VARNAME[0]=0;
+      EquipmentType[0]=0;
+      HistoryRate=0;
+      DataEndianess=-1;
+      BlockSize=-1;
+      NumberOfEntries=-1;
+   }
    const LVDATA<T>* GetFirstDataEntry() const
    {
       return &DATA[0];
@@ -185,14 +218,14 @@ struct LVBANK {
 
 struct LVBANKARRAY {
    char BANK[4];
-   char PAD[4];
+   uint32_t BankArrayID;
    uint32_t BlockSize;
    uint32_t NumberOfEntries;
    //Block of data of unknown type;
    char* DATA[];
    uint32_t GetHeaderSize()
    {
-      return sizeof(BANK)+sizeof(PAD)+sizeof(BlockSize)+sizeof(NumberOfEntries);
+      return sizeof(BANK)+sizeof(BankArrayID)+sizeof(BlockSize)+sizeof(NumberOfEntries);
    }
    uint32_t GetTotalSize()
    {
@@ -200,10 +233,19 @@ struct LVBANKARRAY {
       //std::cout<<"Block size: "<<BlockSize<<std::endl;
       return GetHeaderSize()+BlockSize;
    }
+   void ClearHeader()
+   {
+      for (int i=0; i<4; i++)
+         BANK[i]=0;
+      BankArrayID=-1;
+      BlockSize=-1;
+      NumberOfEntries=-1;
+   }
    void print()
    {
       printf("-------------------------\n");
       printf("BANK:%.4s\n",BANK);
+      printf("BankArrayID:%u\n",BankArrayID);
       printf("BlockSize:%u\n",BlockSize);
       printf("NumberOfEntries:%u\n",NumberOfEntries);
       printf("-------------------------\n");
