@@ -377,14 +377,16 @@ class PeriodicityManager
    }
 };
 
-class feLabVIEWWorker :
+class feLabVIEWClass :
    public TMFeRpcHandlerInterface,
-   public  TMFePeriodicHandlerInterface
+   public TMFePeriodicHandlerInterface
 {
 public:
    TMFE* fMfe;
    TMFeEquipment* fEq;
    
+   enum feLabVIEWClassEnum{SUPERVISOR,WORKER,INVALID};
+   const int feLabVIEWClassType;
    //TCP stuff
    int server_fd;
    struct sockaddr_in address;
@@ -395,83 +397,25 @@ public:
    int lastEventSize; //Used to monitor any changes to fEventSize
    char* fEventBuf;
 
-   //Periodic task query items
+   //Periodic task query items (sould only be send from worker class... not yet limited)
    RunStatusType RunStatus;
    int RUNNO;
 
-   HistoryLogger logger;
    MessageHandler message;
    PeriodicityManager periodicity;
-
-   feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq):logger(mfe,eq), message(mfe), periodicity(mfe,eq) // ctor
+   HistoryLogger logger;
+   feLabVIEWClass(TMFE* mfe, TMFeEquipment* eq , int type ):
+      logger(mfe,eq), 
+      message(mfe), 
+      periodicity(mfe,eq), 
+      feLabVIEWClassType(type)
    {
-      fMfe = mfe;
-      fEq  = eq;
-      //Default event size ok 10kb, will be overwritten by ODB entry in Init()
-      fEventSize = 10000;
-      fEventBuf  = NULL;
 
-      // Creating socket file descriptor 
-      server_fd = socket(AF_INET, SOCK_STREAM, 0);
-      fcntl(server_fd, F_SETFL, O_NONBLOCK);
-
-      if (server_fd==0)
-         exit(1);
-      // Forcefully attaching socket to the port 5555
-      int opt = 1;
-      if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, 
-                                                  &opt, sizeof(opt))) 
-      { 
-         //perror("setsockopt"); 
-         exit(1); 
-      }
-
-      RunStatus=Unknown;
-      RUNNO=-1;
-      fMfe->fOdbRoot->RI("Runinfo/Run number", &RUNNO);
-      //int period=1000;
-      //fEq->fOdbEqCommon->RI("Period",&period);
-      //fEq->fCommon->Period=period;
    }
 
-   ~feLabVIEWWorker() // dtor
-   {
-      if (fEventBuf) {
-         free(fEventBuf);
-         fEventBuf = NULL;
-      }
-      //zmq_close(responder);
-   }
-
-
-   void Init()
-   {
-      fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
-      lastEventSize=fEventSize;
-      fEq->fOdbEqSettings->WS("feVariables","No variables logged yet...",32);
-      fEq->fOdbEqSettings->WU32("DateAdded",0);
-      assert(fPort>0);
-      if (fEventBuf) {
-         free(fEventBuf);
-      }
-      fEventBuf = (char*)malloc(fEventSize);
-      char bind_port[100];
-      sprintf(bind_port,"tcp://*:%d",fPort);
-      std::cout<<"Binding to: "<<bind_port<<std::endl;
-      //int rc=zmq_bind (responder, bind_port);
-      address.sin_family = AF_INET; 
-      address.sin_addr.s_addr = INADDR_ANY; 
-      address.sin_port = htons( fPort ); 
-
-       // Forcefully attaching socket to the port fPort
-      if (bind(server_fd, (struct sockaddr *)&address,  
-                                 sizeof(address))<0) 
-      { 
-         //perror("bind failed"); 
-         exit(1); 
-      }
-      //assert (rc==0);
-   }
+   virtual std::pair<int,bool> FindHostInWorkerList(const char* hostname) { assert(0); return {-1,false}; };
+   virtual int AssignPortForWorker(uint workerID) { assert(0); return -1; };
+   virtual const char* AddNewClient(const char* hostname) { assert(0); return NULL; };
 
    std::string HandleRpc(const char* cmd, const char* args)
    {
@@ -493,6 +437,84 @@ public:
       fMfe->fOdbRoot->RI("Runinfo/Run number", &RUNNO);
       fEq->SetStatus("Stopped", "#00FF00");
       RunStatus=Stopped;
+   }
+   void HandleStrBank(LVBANK<char>* bank)
+   {
+      if (strncmp(bank->NAME.VARNAME,"TALK",4)==0)
+      {
+         bank->print();
+         fMfe->Msg(MTALK, "feLabVIEW", (char*)bank->DATA->DATA);
+         if (strncmp(bank->NAME.VARCATEGORY,"THISHOST",8)==0)
+         {
+            periodicity.ProcessMessage(bank);
+         }
+         return;
+      }
+      else if (strncmp(bank->NAME.VARNAME,"GET_RUNNO",9)==0)
+      {
+         char buf[20]={0};
+         //JSON format already
+         sprintf(buf,"RunNumber:%d",RUNNO);
+         message.QueueData(buf);
+         return;
+      }
+      else if (strncmp(bank->NAME.VARNAME,"GET_STATUS",10)==0)
+      {
+         char buf[20];
+         switch (RunStatus)
+         {
+            case Unknown:
+               sprintf(buf,"STATUS:UNKNOWN");
+            case Running:
+               sprintf(buf,"STATUS:RUNNING");
+            case Stopped:
+               sprintf(buf,"STATUS:STOPPED");
+            default:
+               //JSON format already
+               message.QueueData(buf);
+         }
+         return;
+      }
+      else if (strncmp(bank->NAME.VARNAME,"GET_EVENT_SIZE",14)==0)
+      {
+         char buf[20]={0};
+         //JSON format already
+         sprintf(buf,"EventSize:%d",fEventSize);
+         message.QueueData(buf);
+         return;
+      }
+      else if (strncmp(bank->NAME.VARNAME,"SET_EVENT_SIZE",14)==0)
+      {
+         assert(feLabVIEWClassType==WORKER);
+         fEventSize=atoi((char*)&bank->DATA->DATA[15]);
+         fEq->fOdbEqSettings->WI("event_size", fEventSize);
+         std::cout<<"Event size updated to:"<<fEventSize<<std::endl;
+         return;
+      }
+      else if (strncmp(bank->NAME.VARNAME,"START_FRONTEND",14)==0)
+      {
+         assert(feLabVIEWClassType==SUPERVISOR);
+         message.QueueData(AddNewClient(bank->DATA->DATA));
+         return;
+      }
+      else if (strncmp(bank->NAME.VARNAME,"GIVE_ME_ADDRESS",14)==0)
+      {
+         assert(feLabVIEWClassType==SUPERVISOR);
+         message.QueueData("SendToAddress:alphamidastest8");
+         return;
+      }
+      else if (strncmp(bank->NAME.VARNAME,"GIVE_ME_PORT",14)==0)
+      {
+         assert(feLabVIEWClassType==SUPERVISOR);
+         std::pair<int,bool> WorkerNo=FindHostInWorkerList(bank->DATA->DATA);
+         assert(WorkerNo.second=true); //Assert the frontend thread is running
+         int port=AssignPortForWorker(WorkerNo.first);
+         char log_to_port[80];
+         sprintf(log_to_port,"SendToPort:%u",port);
+         std::cout<<"SEND TO PORT:"<<port<<std::endl;
+         message.QueueData(log_to_port);
+      }
+      logger.Update(bank);
    }
    void LogBank(const char* buf)
    {
@@ -534,57 +556,7 @@ public:
       
       } else if (strncmp(ThisBank->NAME.DATATYPE,"STR",3)==0) {
          LVBANK<char>* bank=(LVBANK<char>*)buf;
-         if (strncmp(bank->NAME.VARNAME,"TALK",4)==0)
-         {
-            bank->print();
-            fMfe->Msg(MTALK, "feLabVIEW", (char*)bank->DATA->DATA);
-            if (strncmp(bank->NAME.VARCATEGORY,"THISHOST",8)==0)
-            {
-               periodicity.ProcessMessage(bank);
-            }
-            return;
-         }
-         else if (strncmp(bank->NAME.VARNAME,"GET_RUNNO",9)==0)
-         {
-            char buf[20]={0};
-            //JSON format already
-            sprintf(buf,"RunNumber:%d",RUNNO);
-            message.QueueData(buf);
-            return;
-         }
-         else if (strncmp(bank->NAME.VARNAME,"GET_STATUS",10)==0)
-         {
-            char buf[20];
-            switch (RunStatus)
-            {
-               case Unknown:
-                  sprintf(buf,"STATUS:UNKNOWN");
-               case Running:
-                  sprintf(buf,"STATUS:RUNNING");
-               case Stopped:
-                  sprintf(buf,"STATUS:STOPPED");
-               default:
-                  //JSON format already
-                  message.QueueData(buf);
-            }
-            return;
-         }
-         else if (strncmp(bank->NAME.VARNAME,"GET_EVENT_SIZE",14)==0)
-         {
-            char buf[20]={0};
-            //JSON format already
-            sprintf(buf,"EventSize:%d",fEventSize);
-            message.QueueData(buf);
-            return;
-         }
-         else if (strncmp(bank->NAME.VARNAME,"SET_EVENT_SIZE",14)==0)
-         {
-            fEventSize=atoi((char*)&bank->DATA->DATA[15]);
-            fEq->fOdbEqSettings->WI("event_size", fEventSize);
-            std::cout<<"Event size updated to:"<<fEventSize<<std::endl;
-            return;
-         }
-         logger.Update(bank);
+         return HandleStrBank(bank);
       } else {
          std::cout<<"Unknown bank data type... "<<std::endl;
          ThisBank->print();
@@ -774,29 +746,93 @@ public:
    }
 };
 
+class feLabVIEWWorker :
+   public feLabVIEWClass
+{
+   public:
+
+   feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq): feLabVIEWClass(mfe,eq,WORKER)
+   {
+      fMfe = mfe;
+      fEq  = eq;
+      //Default event size ok 10kb, will be overwritten by ODB entry in Init()
+      fEventSize = 10000;
+      fEventBuf  = NULL;
+
+      // Creating socket file descriptor 
+      server_fd = socket(AF_INET, SOCK_STREAM, 0);
+      fcntl(server_fd, F_SETFL, O_NONBLOCK);
+
+      if (server_fd==0)
+         exit(1);
+      // Forcefully attaching socket to the port 5555
+      int opt = 1;
+      if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, 
+                                                  &opt, sizeof(opt))) 
+      { 
+         //perror("setsockopt"); 
+         exit(1); 
+      }
+
+      RunStatus=Unknown;
+      RUNNO=-1;
+      fMfe->fOdbRoot->RI("Runinfo/Run number", &RUNNO);
+      //int period=1000;
+      //fEq->fOdbEqCommon->RI("Period",&period);
+      //fEq->fCommon->Period=period;
+   }
+
+   ~feLabVIEWWorker() // dtor
+   {
+      if (fEventBuf) {
+         free(fEventBuf);
+         fEventBuf = NULL;
+      }
+      //zmq_close(responder);
+   }
+
+
+   void Init()
+   {
+      fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
+      lastEventSize=fEventSize;
+      fEq->fOdbEqSettings->WS("feVariables","No variables logged yet...",32);
+      fEq->fOdbEqSettings->WU32("DateAdded",0);
+      assert(fPort>0);
+      if (fEventBuf) {
+         free(fEventBuf);
+      }
+      fEventBuf = (char*)malloc(fEventSize);
+      char bind_port[100];
+      sprintf(bind_port,"tcp://*:%d",fPort);
+      std::cout<<"Binding to: "<<bind_port<<std::endl;
+      //int rc=zmq_bind (responder, bind_port);
+      address.sin_family = AF_INET; 
+      address.sin_addr.s_addr = INADDR_ANY; 
+      address.sin_port = htons( fPort ); 
+
+       // Forcefully attaching socket to the port fPort
+      if (bind(server_fd, (struct sockaddr *)&address,  
+                                 sizeof(address))<0) 
+      { 
+         //perror("bind failed"); 
+         exit(1); 
+      }
+      //assert (rc==0);
+   }
+
+};
+
 class feLabVIEWSupervisor :
-   public TMFeRpcHandlerInterface,
-   public  TMFePeriodicHandlerInterface
+   public feLabVIEWClass
 {
 public:
-   TMFE* fMfe;
-   TMFeEquipment* fEq;
+   MVOdb* fOdbWorkers;
 
-   //TCP stuff
-   int server_fd;
-   struct sockaddr_in address;
-   int addrlen = sizeof(address);
-   int fPort;
-
-   int fEventSize;
-   char* fEventBuf;
-
-   MVOdb* fOdbWorkers; 
-  
    int fPortRangeStart;
    int fPortRangeStop;
 
-   feLabVIEWSupervisor(TMFE* mfe, TMFeEquipment* eq) // ctor
+   feLabVIEWSupervisor(TMFE* mfe, TMFeEquipment* eq): feLabVIEWClass(mfe,eq,SUPERVISOR) // ctor
    {
       fMfe = mfe;
       fEq  = eq;
@@ -890,7 +926,7 @@ public:
       fMfe->Msg(MINFO, "HandleEndRun", "End run!");
       fEq->SetStatus("Stopped", "#00FF00");
    }
-   std::pair<int,bool> FindHostInWorkerList(const char* hostname)
+   virtual std::pair<int,bool> FindHostInWorkerList(const char* hostname)
    {
       std::vector<std::string> hostlist;
       fOdbWorkers->RSA("HostName", &hostlist);
@@ -908,7 +944,7 @@ public:
       std::cout<<"No Match... return size:"<<size<<std::endl;
       return {size,false};
    }
-   int AssignPortForWorker(uint workerID)
+   virtual int AssignPortForWorker(uint workerID)
    {
       std::vector<uint32_t> list;
       fOdbWorkers->RU32A("Port", &list);
@@ -923,7 +959,7 @@ public:
          return list.at(workerID);
       }
    }
-   const char* AddNewClient(const char* hostname)
+   virtual const char* AddNewClient(const char* hostname)
    {
       std::cout<<"Check list of workers"<<std::endl;
       #if 1
@@ -998,11 +1034,11 @@ public:
          //mfe->StartRpcThread();
          //mfe->StartPeriodicThread();
          worker_eq->SetStatus("Started", "white");
-         return "[\"New Frontend started\"]";
+         return "FrontendStatus:New Frontend started";
       }
-      return "[\"Frontend already running\"]";
+      return "FrontendStatus:Frontend already running";
    }
-   void HandlePeriodic()
+   /*void HandlePeriodic()
    {
       //printf("periodic!\n");
       //std::chrono::time_point<std::chrono::system_clock> timer_start=std::chrono::high_resolution_clock::now();
@@ -1094,23 +1130,8 @@ public:
             std::cout<<fEventBuf[i];
          exit(1);
       }
-/*      std::chrono::time_point<std::chrono::system_clock> timer_stop=std::chrono::high_resolution_clock::now();
-      std::chrono::duration<double> handlingtime=timer_stop - timer_start;
-      std::cout<<"Handling time: "<<handlingtime.count()<<std::endl;
-      if (error)
-      {
-         zmq_send (responder, error, strlen(error), 0);
-         fMfe->Msg(MTALK, "feLabVIEW", error);
-         exit(1);
-      }
-      else
-      {
-         char message[100];
-         sprintf(message,"DATA OK (Processed in %fms)",1000*handlingtime.count());
-         zmq_send (responder, message, strlen(message), 0);
-      }*/
       return;
-   }
+   }*/
 };
 
 static void usage()
