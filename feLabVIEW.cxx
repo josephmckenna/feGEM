@@ -464,11 +464,11 @@ public:
          switch (RunStatus)
          {
             case Unknown:
-               sprintf(buf,"STATUS:UNKNOWN");
+               sprintf(buf,"RunStatus:UNKNOWN");
             case Running:
-               sprintf(buf,"STATUS:RUNNING");
+               sprintf(buf,"RunStatus:RUNNING");
             case Stopped:
-               sprintf(buf,"STATUS:STOPPED");
+               sprintf(buf,"RunStatus:STOPPED");
             default:
                //JSON format already
                message.QueueData(buf);
@@ -477,16 +477,23 @@ public:
       }
       else if (strncmp(bank->NAME.VARNAME,"GET_EVENT_SIZE",14)==0)
       {
-         char buf[20]={0};
+         char buf[80]={0};
          //JSON format already
          sprintf(buf,"EventSize:%d",fEventSize);
+         std::cout<<buf<<std::endl;
          message.QueueData(buf);
          return;
       }
       else if (strncmp(bank->NAME.VARNAME,"SET_EVENT_SIZE",14)==0)
       {
          assert(feLabVIEWClassType==WORKER);
-         fEventSize=atoi((char*)&bank->DATA->DATA[15]);
+         std::cout<<"Updating event size:"<<(char*)&bank->DATA->DATA<<std::endl;
+         fEventSize=atoi((char*)&bank->DATA->DATA);
+         if (fEventSize<10000)
+         {
+            fMfe->Msg(MTALK, "feLabVIEW", "Minimum event size can not be less that 10 kilo bytes");
+            fEventSize=10000;
+         }
          fEq->fOdbEqSettings->WI("event_size", fEventSize);
          std::cout<<"Event size updated to:"<<fEventSize<<std::endl;
          return;
@@ -512,7 +519,13 @@ public:
          char log_to_port[80];
          sprintf(log_to_port,"SendToPort:%u",port);
          std::cout<<"SEND TO PORT:"<<port<<std::endl;
+         std::cout<<log_to_port<<std::endl;
          message.QueueData(log_to_port);
+      }
+      else
+      {
+         std::cout<<"String not understood!"<<std::endl;
+         bank->print();
       }
       logger.Update(bank);
    }
@@ -609,7 +622,9 @@ public:
 
    void HandlePeriodic()
    {
-      //printf("periodic!\n");
+      //
+      //if (fPort!=5555)
+      //std::cout<<"periodic (port:"<<fPort<<")"<<std::endl;
       std::chrono::time_point<std::chrono::system_clock> timer_start=std::chrono::high_resolution_clock::now();
       //char buf[256];
       //sprintf(buf, "buffered %d (max %d), dropped %d, unknown %d, max flushed %d", gUdpPacketBufSize, fMaxBuffered, fCountDroppedPackets, fCountUnknownPackets, fMaxFlushed);
@@ -657,11 +672,21 @@ public:
       // The header of a LVBANK is 88 bytes
       // The header of a LVBANKARRAY is 32 bytes
       // So... the minimum data we need for GetTotalSize() to work is 88 bytes
+      int max_reads=100000;
       while (read_status<88)
       {
          read_status= read( new_socket , ptr+position, fEventSize-position);
+         //std::cout<<"read:"<<read_status<<"\t"<<position<<std::endl;
          position+=read_status;
          if (!position) break; //Nothing to read... 
+         if (--max_reads == 0)
+         {
+            char message[100];
+            sprintf(message,"TCP Read timeout getting bank header");
+            fMfe->Msg(MTALK, "feLabVIEW", message);
+            return;
+         }
+         //sleep(1);
       }
       // No data to read... does quitting cause a memory leak? It seems not (tested with valgrind)
       if (read_status<=0)
@@ -675,15 +700,24 @@ public:
          periodicity.LogPeriodicWithData();
       }
       //Read a full LVBANKARRAY
+      max_reads=100000;
       if (strncmp(ptr,"PYA1",4)==0 || strncmp(ptr,"LVA1",4)==0)
       {
          LVBANKARRAY* bank=(LVBANKARRAY*)ptr;
          BankSize=bank->GetTotalSize();
+         std::cout<<"BankSize:"<<BankSize<<std::endl;
          while (read_status<BankSize)
          {
             read_status= read( new_socket , ptr+position, BankSize-position);
             if (!read_status) break;
             position+=read_status;
+            if (--max_reads == 0)
+            {
+               char message[100];
+               sprintf(message,"TCP Read timeout getting LVBANKARRAY");
+               fMfe->Msg(MTALK, "feLabVIEW", message);
+               return;
+            } 
          }
          assert(BankSize==position);
          read_status=position;
@@ -698,6 +732,13 @@ public:
             read_status= read( new_socket , ptr+position, BankSize-position);
             position+=read_status;
             if (!read_status) break;
+            if (--max_reads == 0)
+            {
+               char message[100];
+               sprintf(message,"TCP Read timeout getting LVBANK");
+               fMfe->Msg(MTALK, "feLabVIEW", message);
+               return;
+            } 
          }
          assert(BankSize==position);
          read_status=position;
@@ -738,6 +779,7 @@ public:
       bool KillFrontend=message.HaveErrors();
       std::string reply=message.ReadMessageQueue();
       send(new_socket, reply.c_str(), reply.size(), 0 );
+      shutdown(new_socket,SHUT_RD);
       close(new_socket);
       //zmq_send (responder, reply.c_str(), reply.size(), 0);
       if (KillFrontend)
