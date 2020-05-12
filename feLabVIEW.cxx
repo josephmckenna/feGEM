@@ -145,6 +145,8 @@ class HistoryVariable
    template<typename T>
    void Update(const LVBANK<T>* lvbank)
    {
+      if (!UpdateFrequency)
+         return;
       const LVDATA<T>* data=lvbank->GetLastDataEntry();
       //std::cout <<data->GetUnixTimestamp() <<" <  " <<fLastUpdate + UpdateFrequency <<std::endl;
       if (data->GetUnixTimestamp() < fLastUpdate + UpdateFrequency)
@@ -518,7 +520,7 @@ public:
          int port=AssignPortForWorker(WorkerNo.first);
          char log_to_port[80];
          sprintf(log_to_port,"SendToPort:%u",port);
-         std::cout<<"SEND TO PORT:"<<port<<std::endl;
+         //std::cout<<"SEND TO PORT:"<<port<<std::endl;
          std::cout<<log_to_port<<std::endl;
          message.QueueData(log_to_port);
       }
@@ -624,6 +626,8 @@ public:
    {
       //
       //if (fPort!=5555)
+      //printf("Thread %s, periodic!\n", TMFE::GetThreadId().c_str());
+
       //std::cout<<"periodic (port:"<<fPort<<")"<<std::endl;
       std::chrono::time_point<std::chrono::system_clock> timer_start=std::chrono::high_resolution_clock::now();
       //char buf[256];
@@ -700,16 +704,16 @@ public:
          periodicity.LogPeriodicWithData();
       }
       //Read a full LVBANKARRAY
-      max_reads=100000;
+      max_reads=10000;
       if (strncmp(ptr,"PYA1",4)==0 || strncmp(ptr,"LVA1",4)==0)
       {
          LVBANKARRAY* bank=(LVBANKARRAY*)ptr;
          BankSize=bank->GetTotalSize();
-         std::cout<<"BankSize:"<<BankSize<<std::endl;
-         while (read_status<BankSize)
+         //std::cout<<"BankSize:"<<BankSize<<std::endl;
+         while (position<BankSize)
          {
             read_status= read( new_socket , ptr+position, BankSize-position);
-            if (!read_status) break;
+            if (!read_status) sleep(0.1);
             position+=read_status;
             if (--max_reads == 0)
             {
@@ -719,6 +723,7 @@ public:
                return;
             } 
          }
+         //std::cout<<BankSize<<"=="<<position<<std::endl;
          assert(BankSize==position);
          read_status=position;
       }
@@ -727,11 +732,11 @@ public:
       {
          LVBANK<void*>* bank=(LVBANK<void*>*)ptr;
          BankSize=bank->GetTotalSize();
-         while (read_status<BankSize)
+         while (position<BankSize)
          {
             read_status= read( new_socket , ptr+position, BankSize-position);
             position+=read_status;
-            if (!read_status) break;
+            if (!read_status) sleep(0.1);
             if (--max_reads == 0)
             {
                char message[100];
@@ -745,7 +750,7 @@ public:
       }
       
       //Process what we have read into the MIDAS bank
-      printf ("[%s] Received %c%c%c%c (%d bytes)",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],read_status);
+      //printf ("[%s] Received %c%c%c%c (%d bytes)",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],read_status);
       if (strncmp(ptr,"PING",4)==0) {
          std::cout<<"PING!!!"<<std::endl;
          send(new_socket, "PONG", 4, 0 );
@@ -773,9 +778,10 @@ public:
       printf ("[%s] Handled %c%c%c%c (%d bytes) in %fms\n",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],read_status,handlingtime.count()*1000);
       
       char buf[100];
-      sprintf(buf,"DATA OK (Processed in %fms)",1000*handlingtime.count());
+      sprintf(buf,"DATA OK");
       message.QueueMessage(buf);
-
+      sprintf(buf,"MIDASTime:%f",1000*handlingtime.count());
+      message.QueueData(buf);
       bool KillFrontend=message.HaveErrors();
       std::string reply=message.ReadMessageQueue();
       send(new_socket, reply.c_str(), reply.size(), 0 );
@@ -1075,6 +1081,7 @@ public:
 
          //mfe->StartRpcThread();
          //mfe->StartPeriodicThread();
+         mfe->StartPeriodicThreads();
          worker_eq->SetStatus("Started", "white");
          return "FrontendStatus:New Frontend started";
       }
