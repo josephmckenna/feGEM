@@ -104,6 +104,193 @@ class MessageHandler
    }
 };
 
+#include <list>
+#include <mutex>
+//Thread safe class to monitor host permissions
+class AllowedHosts
+{
+   class Host{
+      public:
+      const std::string HostName;
+      int RejectionCount;
+      std::chrono::time_point<std::chrono::system_clock> LastContact;
+      Host(const char* hostname): HostName(hostname)
+      {
+         RejectionCount=0;
+         LastContact=std::chrono::high_resolution_clock::now();
+      }
+      double TimeSince(std::chrono::time_point<std::chrono::system_clock> t)
+      {
+         return std::chrono::duration<double, std::milli>(t-LastContact).count();
+      }
+     double TimeSinceLastContact()
+       {
+         return TimeSince(std::chrono::high_resolution_clock::now());
+      }
+      bool operator==(const char* hostname) const
+      {
+         return (strcmp(HostName.c_str(),hostname)==0);
+      }
+      bool operator==(const Host & rhs) const
+      {   
+         return HostName==rhs.HostName;
+      }
+      void print()
+      {
+         std::cout<<"HostName:\t"<<HostName<<"\n";
+         std::cout<<"RejectionCount:\t"<<RejectionCount<<"\n";
+         std::cout<<"Last rejection:\t"<< TimeSinceLastContact()*1000.<<"s ago"<<std::endl;
+      }
+   };
+   private:
+   std::mutex list_lock;
+   //Allowed hosts:
+   std::vector<Host> white_list;
+   //Hosts with questioned behaviour
+   std::list<Host> grey_list;
+   //Banned hosts:
+   std::vector<Host> black_list;
+   const int cool_down_time; //ms
+   const int retry_limit;
+   
+   MVOdb* fOdbEqSettings;
+   
+   public:
+   AllowedHosts(TMFE* mfe): cool_down_time(1000), retry_limit(10)
+   {
+      //Set cooldown time to 10 seconds
+      //Set retry limit to 10
+      fOdbEqSettings=mfe->fOdbRoot->Chdir((std::string("Equipment/") + mfe->fFrontendName + std::string("/Settings")).c_str() );
+      std::vector<std::string> list;
+      
+      fOdbEqSettings->RSA("allowed_hosts", &list,true);
+      for (auto host: list)
+         white_list.push_back(Host(host.c_str()));
+      
+      fOdbEqSettings->RSA("black_listed_hosts", &list,true);
+      for (auto host: list)
+         black_list.push_back(Host(host.c_str()));
+   }
+   void PrintRejection(TMFE* mfe,const char* hostname)
+   {
+      for (auto & host: black_list)
+      {
+         if (host==hostname)
+         {
+            if (host.RejectionCount<2*retry_limit)
+               mfe->Msg(MERROR, "tryAccept", "rejecting connection from unallowed host \'%s\'", hostname);
+            if (host.RejectionCount==2*retry_limit)
+               mfe->Msg(MERROR, "tryAccept", "rejecting connection from unallowed host \'%s\'. This message will now be suppressed", hostname); 
+            host.RejectionCount++;
+         }
+      }
+      
+   }
+   bool IsAllowed(const char* hostname)
+   {
+      if (IsWhiteListed(hostname))
+         return true;
+      if (IsBlackListed(hostname))
+         return false;
+      if (IsGreyListed(hostname))
+         return true;  
+   }
+   bool IsWhiteListed(const char* hostname)
+   {
+      //std::cout<<"Looking for host:"<<hostname<<std::endl;
+      std::lock_guard<std::mutex> lock(list_lock);
+      for (auto host: white_list)
+      {
+         //host.print();
+         if (host==hostname)
+            return true;
+      }
+      return false;
+   }
+   //Allow this host:
+   bool AddHost(const char* hostname)
+   {
+      if (!IsWhiteListed(hostname))
+      {
+         {
+         std::lock_guard<std::mutex> lock(list_lock);
+         white_list.push_back(Host(hostname));
+         }
+         std::cout<<"DAVE"<<hostname<<std::endl;
+         fOdbEqSettings->WSAI("allowed_hosts",(int)white_list.size(), hostname);
+         //True for new item added
+         return true;
+      }
+      //False, item not added (already in list)
+      return false;
+   }
+   //Ban this host:
+   bool BlackList(const char* hostname)
+   {
+      if (!IsBlackListed(hostname))
+      {
+         {
+         std::lock_guard<std::mutex> lock(list_lock);
+         black_list.push_back(Host(hostname));
+         fOdbEqSettings->WSAI("black_listed_hosts",black_list.size() -1, hostname );
+         }
+         return true;
+      }
+      return false;
+   }
+
+   private:
+   bool IsBlackListed(const char* hostname)
+   {
+      const std::lock_guard<std::mutex> lock(list_lock);
+      if (!black_list.size()) return false;
+      for (auto & host: black_list)
+      //for(std::vector<Host>::iterator host = black_list.begin(); host != black_list.end(); ++host) 
+      {
+         if (host==hostname)
+            return true;
+      }
+      return false;
+   }
+   bool IsGreyListed(const char* hostname)
+   {
+      const std::lock_guard<std::mutex> lock(list_lock);
+      for (auto& host: grey_list)
+      {
+         if (host==hostname)
+         {
+            host.print();
+            std::cout<<"Rejection count:"<<host.RejectionCount<<std::endl;
+            if (host.RejectionCount>retry_limit)
+            {
+               std::cout<<"Black listing "<<hostname<<std::endl;
+               black_list.push_back(host);
+               grey_list.remove(host);
+            }
+            
+            std::chrono::time_point<std::chrono::system_clock> time_now=std::chrono::high_resolution_clock::now();
+            std::cout<<host.TimeSince(time_now) << ">"<<cool_down_time<<std::endl;
+            if (host.TimeSince(time_now)>cool_down_time)
+            {
+               std::cout<<"I've seen this host before, but "<<host.TimeSince(time_now)/1000. <<" seconds a long time ago"<<std::endl;
+               host.LastContact=time_now;
+               host.RejectionCount++;
+               return true;
+            }
+            else
+            {
+               std::cout<<"This host has tried to connect too recently"<<std::endl;
+               return false;
+            }
+         }
+      }
+      //This is the first time a host has tried to connect:
+      grey_list.push_back(Host(hostname));
+      return true;
+   }
+   
+};
+
 #include <chrono>
 class HistoryVariable
 {
@@ -402,17 +589,17 @@ public:
    //Periodic task query items (sould only be send from worker class... not yet limited)
    RunStatusType RunStatus;
    int RUNNO;
-
+   AllowedHosts* allowed_hosts;
    MessageHandler message;
    PeriodicityManager periodicity;
    HistoryLogger logger;
-   feLabVIEWClass(TMFE* mfe, TMFeEquipment* eq , int type ):
-      logger(mfe,eq), 
+   feLabVIEWClass(TMFE* mfe, TMFeEquipment* eq , AllowedHosts* hosts, int type ):
+      feLabVIEWClassType(type),
       message(mfe), 
       periodicity(mfe,eq), 
-      feLabVIEWClassType(type)
+      logger(mfe,eq)
    {
-
+      allowed_hosts=hosts;
    }
 
    virtual std::pair<int,bool> FindHostInWorkerList(const char* hostname) { assert(0); return {-1,false}; };
@@ -506,7 +693,12 @@ public:
          message.QueueData(AddNewClient(bank->DATA->DATA));
          return;
       }
-      else if (strncmp(bank->NAME.VARNAME,"GIVE_ME_ADDRESS",14)==0)
+      else if (strncmp(bank->NAME.VARNAME,"ALLOW_HOST",14)==0)
+      {
+         allowed_hosts->AddHost(bank->DATA->DATA);
+         return;
+      }
+      else if (strncmp(bank->NAME.VARNAME,"GIVE_ME_ADDRESS",15)==0)
       {
          assert(feLabVIEWClassType==SUPERVISOR);
          message.QueueData("SendToAddress:alphamidastest8");
@@ -630,10 +822,8 @@ public:
 
       //std::cout<<"periodic (port:"<<fPort<<")"<<std::endl;
       std::chrono::time_point<std::chrono::system_clock> timer_start=std::chrono::high_resolution_clock::now();
-      //char buf[256];
-      //sprintf(buf, "buffered %d (max %d), dropped %d, unknown %d, max flushed %d", gUdpPacketBufSize, fMaxBuffered, fCountDroppedPackets, fCountUnknownPackets, fMaxFlushed);
-      //fEq->SetStatus(buf, "#00FF00");
 
+      //Check if we need to change the MIDAS event buffer size
       if (lastEventSize!=fEventSize)
       {
          std::cout<<"fEventSize updated! Flushing buffer"<<std::endl;
@@ -644,23 +834,48 @@ public:
             std::cout<<"Event buffer re-initialised "<<std::endl;
       }
       lastEventSize=fEventSize;
+
+      //Listen for TCP connections
       if (listen(server_fd, 3) < 0) 
       { 
          perror("listen"); 
          exit(EXIT_FAILURE); 
       } 
-      //std::cout<<"Accept"<<std::endl;
-      int new_socket = accept(server_fd, (struct sockaddr *)&address,  
-                       (socklen_t*)&addrlen);
+      
+      int new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
       if (new_socket<0) 
       { 
          //perror("accept"); 
          //exit(EXIT_FAILURE); 
          return;
       }
+
+      //Security: Check if host in in allowed host lists
+      char hostname[200];
+      int name_status=getnameinfo((struct sockaddr *)&address, addrlen,
+                       hostname, 200,NULL,NULL,0);
+      bool allowed=false;
+      if (feLabVIEWClassType==WORKER)
+      {
+         //Only white listed hosts allow on worker
+         allowed=allowed_hosts->IsWhiteListed(hostname);
+      }
+      else if (feLabVIEWClassType==SUPERVISOR)
+      {
+         //Allow grey listed hosts on supervisor
+         allowed=allowed_hosts->IsAllowed(hostname);
+      }
+      if (!allowed)
+      {
+         allowed_hosts->PrintRejection(fMfe,hostname);
+         close(new_socket);
+         return;
+      }
+
       //Make sure header memory is clean
       ((LVBANKARRAY*)fEventBuf)->ClearHeader();
       ((LVBANK<void*>*)fEventBuf)->ClearHeader();
+      bool legal_message=false;
       //Prepare the MIDAS bank so that we can directly write into from the TCP buffer
       fEq->ComposeEvent(fEventBuf, fEventSize);
       fEq->BkInit(fEventBuf, fEventSize);
@@ -677,6 +892,7 @@ public:
       // The header of a LVBANKARRAY is 32 bytes
       // So... the minimum data we need for GetTotalSize() to work is 88 bytes
       int max_reads=100000;
+      //std::vector<std::sting>={"LVA1","LVB1","PYA1","PYA1"};
       while (read_status<88)
       {
          read_status= read( new_socket , ptr+position, fEventSize-position);
@@ -703,61 +919,53 @@ public:
          fEq->WriteStatistics();
          periodicity.LogPeriodicWithData();
       }
-      //Read a full LVBANKARRAY
+      
       max_reads=10000;
+      
+      //We have the header... check for compliant data type and get the total size (BankSize)
       if (strncmp(ptr,"PYA1",4)==0 || strncmp(ptr,"LVA1",4)==0)
       {
          LVBANKARRAY* bank=(LVBANKARRAY*)ptr;
          BankSize=bank->GetTotalSize();
-         //std::cout<<"BankSize:"<<BankSize<<std::endl;
-         while (position<BankSize)
-         {
-            read_status= read( new_socket , ptr+position, BankSize-position);
-            if (!read_status) sleep(0.1);
-            position+=read_status;
-            if (--max_reads == 0)
-            {
-               char message[100];
-               sprintf(message,"TCP Read timeout getting LVBANKARRAY");
-               fMfe->Msg(MTALK, "feLabVIEW", message);
-               return;
-            } 
-         }
-         //std::cout<<BankSize<<"=="<<position<<std::endl;
-         assert(BankSize==position);
-         read_status=position;
       }
-      //Read a full LVBANK
       else if (strncmp(ptr,"PYB1",4)==0 || strncmp(ptr,"LVB1",4)==0)
       {
          LVBANK<void*>* bank=(LVBANK<void*>*)ptr;
          BankSize=bank->GetTotalSize();
-         while (position<BankSize)
-         {
-            read_status= read( new_socket , ptr+position, BankSize-position);
-            position+=read_status;
-            if (!read_status) sleep(0.1);
-            if (--max_reads == 0)
-            {
-               char message[100];
-               sprintf(message,"TCP Read timeout getting LVBANK");
-               fMfe->Msg(MTALK, "feLabVIEW", message);
-               return;
-            } 
-         }
-         assert(BankSize==position);
-         read_status=position;
+      }   //std::cout<<"BankSize:"<<BankSize<<std::endl;
+      else
+      {
+         cm_msg(MTALK, "feLabVIEW", "Host %s is sending malformed data... black listing...", hostname);
+         //std::cout<<"Black listing host!"<<std::endl;
+         allowed_hosts->BlackList(hostname);
+         legal_message=false;
+         close(new_socket);
+         return;
       }
+      
+      //The header looks ok, lets get the whole thing LVBANK / LVBANKARRAY
+      while (position<BankSize)
+      {
+         read_status= read( new_socket , ptr+position, BankSize-position);
+         if (!read_status) sleep(0.1);
+         position+=read_status;
+         if (--max_reads == 0)
+         {
+            char message[100];
+            sprintf(message,"TCP Read timeout getting LVBANKARRAY");
+            fMfe->Msg(MTALK, "feLabVIEW", message);
+            return;
+         } 
+      }
+      //std::cout<<BankSize<<"=="<<position<<std::endl;
+      if (BankSize==position)
+         legal_message=true;
+      assert(BankSize==position);
+      read_status=position;
       
       //Process what we have read into the MIDAS bank
       //printf ("[%s] Received %c%c%c%c (%d bytes)",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],read_status);
-      if (strncmp(ptr,"PING",4)==0) {
-         std::cout<<"PING!!!"<<std::endl;
-         send(new_socket, "PONG", 4, 0 );
-         close(new_socket);
-         //zmq_send(responder, "PONG", 4, 0);
-         return;
-      } else if (strncmp(ptr,"PYA1",4)==0 || strncmp(ptr,"LVA1",4)==0) {
+      if (strncmp(ptr,"PYA1",4)==0 || strncmp(ptr,"LVA1",4)==0) {
          //std::cout<<"["<<fEq->fName.c_str()<<"] Python / LabVIEW Bank Array found!"<<std::endl;
          HandleBankArray(ptr); //Iterates over array with HandleBank()
       } else if (strncmp(ptr,"PYB1",4)==0 || strncmp(ptr,"LVB1",4)==0 ) {
@@ -770,17 +978,22 @@ public:
             std::cout<<ptr[i];
          exit(1);
       }
+      if (!legal_message)
+      {
+         close(new_socket);
+         return;
+      }
       fEq->BkClose(fEventBuf, ptr+BankSize);
       fEq->SendEvent(fEventBuf);
       std::chrono::time_point<std::chrono::system_clock> timer_stop=std::chrono::high_resolution_clock::now();
-      std::chrono::duration<double> handlingtime=timer_stop - timer_start;
+      std::chrono::duration<double, std::milli> handlingtime=timer_stop - timer_start;
       //std::cout<<"["<<fEq->fName.c_str()<<"] Handling time: "<<handlingtime.count()*1000 <<"ms"<<std::endl;
-      printf ("[%s] Handled %c%c%c%c (%d bytes) in %fms\n",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],read_status,handlingtime.count()*1000);
-      
+      printf ("[%s] Handled %c%c%c%c (%d bytes) in %fms\n",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],read_status,handlingtime.count());
+
       char buf[100];
       sprintf(buf,"DATA OK");
       message.QueueMessage(buf);
-      sprintf(buf,"MIDASTime:%f",1000*handlingtime.count());
+      sprintf(buf,"MIDASTime:%f", handlingtime  .count());
       message.QueueData(buf);
       bool KillFrontend=message.HaveErrors();
       std::string reply=message.ReadMessageQueue();
@@ -799,7 +1012,7 @@ class feLabVIEWWorker :
 {
    public:
 
-   feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq): feLabVIEWClass(mfe,eq,WORKER)
+   feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts): feLabVIEWClass(mfe,eq,hosts,WORKER)
    {
       fMfe = mfe;
       fEq  = eq;
@@ -880,7 +1093,7 @@ public:
    int fPortRangeStart;
    int fPortRangeStop;
 
-   feLabVIEWSupervisor(TMFE* mfe, TMFeEquipment* eq): feLabVIEWClass(mfe,eq,SUPERVISOR) // ctor
+   feLabVIEWSupervisor(TMFE* mfe, TMFeEquipment* eq): feLabVIEWClass(mfe,eq,new AllowedHosts(mfe),SUPERVISOR) // ctor
    {
       fMfe = mfe;
       fEq  = eq;
@@ -1010,54 +1223,23 @@ public:
    virtual const char* AddNewClient(const char* hostname)
    {
       std::cout<<"Check list of workers"<<std::endl;
-      #if 1
       std::pair<int,bool> WorkerNo=FindHostInWorkerList(hostname);
       int port=AssignPortForWorker(WorkerNo.first);
       std::cout<<"Assign port "<<port<< " for worker "<<WorkerNo.first<<std::endl;
-      #else
-      int port=5556;
-      int WorkerNo=0;
-      #endif
       if (WorkerNo.second==false)
-      
       {
-      //void *local_context = zmq_ctx_new ();
-      //void *pinger = zmq_socket (local_context, ZMQ_REQ);
-      //char bind_port[100];
-      //sprintf(bind_port,"tcp://*:%d",port);
-      //std::cout<<"Binding to: "<<bind_port<<std::endl;
-      //int rc=zmq_bind (pinger, bind_port);
-      //if (rc!=0)
-      //{
-      //   std::cout<<"Binding failed! The frontend is probably running... wahoo"<<std::endl;
-      //   zmq_close(pinger);
-      //   zmq_ctx_destroy(local_context);
-      //} else {
-      //   zmq_unbind (pinger, bind_port);
-         //char command[100];
-         //sprintf(command,"./feLabVIEW.exe --client %s --port %u &> test-%u.log ",hostname,port,WorkerNo);
-         //std::cout<<"Running command:" << command<<std::endl;
-         //ss_system(command);
-         //std::cout<<"Command launched"<<std::endl;
-         //zmq_close(pinger);
-         //zmq_ctx_destroy(local_context);
+         allowed_hosts->AddHost(hostname);
 
          std::string name = "fe";
          name+="LV_";
          name+=hostname;
 
-         //TMFE* mfe = TMFE::Instance();
          TMFE* mfe=fMfe;
          if (name.size()>31)
          {
             mfe->Msg(MERROR, "feLabVIEW", "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
             exit(1);
          }
-         //TMFeError err = mfe->Connect(name.c_str(), __FILE__);
-         //if (err.error) {
-         //   printf("Cannot connect, bye.\n");
-         //   exit(1);
-         //}
 
          TMFeCommon *common = new TMFeCommon();
          common->EventID = 1;
@@ -1065,15 +1247,12 @@ public:
 
          TMFeEquipment* worker_eq = new TMFeEquipment(mfe, name.c_str(), common);
          worker_eq->Init();
-         //If not default setting, update ODB
-         //if (max_event_size!=0)
-         //   worker_eq->fOdbEqSettings->WI("event_size", max_event_size);
 
          worker_eq->SetStatus("Starting...", "white");
          worker_eq->ZeroStatistics();
          worker_eq->WriteStatistics();
          mfe->RegisterEquipment(worker_eq);
-         feLabVIEWWorker* workerfe = new feLabVIEWWorker(mfe,worker_eq);
+         feLabVIEWWorker* workerfe = new feLabVIEWWorker(mfe,worker_eq,allowed_hosts);
          workerfe->fPort=port;
          mfe->RegisterRpcHandler(workerfe);
          workerfe->Init();
@@ -1081,111 +1260,18 @@ public:
 
          //mfe->StartRpcThread();
          //mfe->StartPeriodicThread();
-         mfe->StartPeriodicThreads();
+         //mfe->StartPeriodicThreads();
          worker_eq->SetStatus("Started", "white");
          return "FrontendStatus:New Frontend started";
       }
       return "FrontendStatus:Frontend already running";
    }
-   /*void HandlePeriodic()
-   {
-      //printf("periodic!\n");
-      //std::chrono::time_point<std::chrono::system_clock> timer_start=std::chrono::high_resolution_clock::now();
-      if (listen(server_fd, 3) < 0) 
-      { 
-         perror("listen"); 
-         exit(EXIT_FAILURE); 
-      } 
-      int new_socket = accept(server_fd, (struct sockaddr *)&address,  
-                       (socklen_t*)&addrlen);
-      if (new_socket<0) 
-      { 
-         //perror("accept"); 
-         //exit(EXIT_FAILURE); 
-         return;
-      }
-      int read_status= read( new_socket , fEventBuf, fEventSize); 
-      //int read_status=zmq_recv (responder, fEventBuf, fEventSize, ZMQ_NOBLOCK);
-      //std::cout<<"READ STATUS:"<<read_status<<std::endl;
-      //No data to read... does quitting cause a memory leak? It seems not (tested with valgrind)
-      if (read_status<=0)
-         return;
-      //We use this as a char array... add terminating character at end of read
-      fEventBuf[read_status]=0;
-      std::cout<<fEventBuf<<std::endl;
-      printf ("[%s] Supervisor received (%c%c%c%c)\n",fEq->fName.c_str(),fEventBuf[0],fEventBuf[1],fEventBuf[2],fEventBuf[3]);
-      if (strncmp(fEventBuf,"START_FRONTEND",14)==0)
-      {
-         char hostname[100];
-         sprintf(hostname,"%s",&fEventBuf[15]);
-         //Trim the hostname at the first '.'
-         for (int i=0; i<100; i++)
-         {
-            if (hostname[i]=='.')
-            {
-               hostname[i]=0;
-               break;
-            }
-         }
-         const char* response=AddNewClient(hostname);
-         send(new_socket, response, strlen(response), 0 );
-         shutdown(new_socket,SHUT_RD);
-         close(new_socket);
-         //zmq_send (responder, response, strlen(response), 0);
-         return;
-      } else if (strncmp(fEventBuf,"GIVE_ME_ADDRESS",15)==0) {
-         char log_to_address[100];
-         sprintf(log_to_address,"[\"SendToAddress:alphamidastest8\"]");
-         std::cout<<"SEND DATA TO ADDRESS:"<<log_to_address<<std::endl;
-         send(new_socket, log_to_address, strlen(log_to_address), 0);
-         shutdown(new_socket,SHUT_RD);
-         close(new_socket);
-         //zmq_send (responder, log_to_address, strlen(log_to_address), 0);
-         return;
-      } else if (strncmp(fEventBuf,"GIVE_ME_PORT",12)==0) {
-         char hostname[100];
-         sprintf(hostname,"%s",&fEventBuf[13]);
-         //Trim the hostname at the first '.'
-         for (int i=0; i<100; i++)
-         {
-            if (hostname[i]=='.')
-            {
-               hostname[i]=0;
-               break;
-            }
-         }
-         std::cout<<hostname<<std::endl;
-         for (int i=0; i<100; i++)
-         {
-            if (hostname[i]=='.')
-            {
-               hostname[i]=0;
-               break;
-            }
-         }
-         std::pair<int,bool> WorkerNo=FindHostInWorkerList(hostname);
-         assert(WorkerNo.second=true); //Assert the frontend thread is running
-         int port=AssignPortForWorker(WorkerNo.first);
-         char log_to_port[80];
-         sprintf(log_to_port,"[\"SendToPort:%u\"]",port);
-         std::cout<<"SEND TO PORT:"<<port<<std::endl;
-         send(new_socket, log_to_port, strlen(log_to_port), 0);
-         shutdown(new_socket,SHUT_RD);
-         close(new_socket);
-         return;
-      } else {
-         std::cout<<"Unknown message just received: "<<std::endl;
-         for (int i=0;i<50; i++)
-            std::cout<<fEventBuf[i];
-         exit(1);
-      }
-      return;
-   }*/
+  
 };
 
 static void usage()
 {
-   fprintf(stderr, "Usage: feLabview --supervisor\n");
+   fprintf(stderr, "Usage: feLabview.exe\n");
    fprintf(stderr, "Usage: feLabview --client hostname\n");
    
    exit(1);
@@ -1205,7 +1291,7 @@ int main(int argc, char* argv[])
       args.push_back(argv[i]);
    }
 
-   bool SupervisorMode=false;
+   bool SupervisorMode=true;
    std::string client="NULL";
    int port          =5555;
    int max_event_size=0;
@@ -1215,11 +1301,9 @@ int main(int argc, char* argv[])
       const char* arg = args[i].c_str();
       //printf("argv[%d] is %s\n",i,arg);
 
-      if (strncmp(arg,"--supervisor",12)==0) {
-         std::cout<<"Starting in supervisor mode"<<std::endl;
-         SupervisorMode=true;
-      } else if (strncmp(arg,"--client",8)==0) {
+      if (strncmp(arg,"--client",8)==0) {
          client = args[++i];
+         SupervisorMode=false;
       } else if (strncmp(arg,"--port",8)==0) {
          port = atoi(args[++i].c_str());
       } else if (strncmp(arg,"--max_event_size",16)==0) {
@@ -1236,7 +1320,10 @@ int main(int argc, char* argv[])
    }
    std::string name = "fe";
    if (SupervisorMode)
-      name+="LabVIEW_supervisor";
+   {
+      std::cout<<"Starting in supervisor mode"<<std::endl;
+      name+="LabVIEW";
+   }
    else
    {
       name+="LV_";
@@ -1284,7 +1371,8 @@ int main(int argc, char* argv[])
    }
    else
    {
-      feLabVIEWWorker* myfe = new feLabVIEWWorker(mfe,eq);
+      //Probably broken
+      feLabVIEWWorker* myfe = new feLabVIEWWorker(mfe,eq,new AllowedHosts(mfe));
       myfe->fPort=port;
       mfe->RegisterRpcHandler(myfe);
       myfe->Init();
