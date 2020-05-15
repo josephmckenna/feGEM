@@ -25,38 +25,11 @@ T change_endian(T in)
     return in;
 }
 
-std::string SanitiseBankString(const char* input, int assert_size=0)
-{
-   //std::cout<<input;
-   const int input_size=strlen(input);
-   int output_size=input_size;
-   if (assert_size)
-      output_size=assert_size;
-   std::string output;
-   output.resize(output_size);
-   
-   int i,j;
-   for (i = 0, j = 0; i<input_size; i++,j++)
-   {
-      if (isalnum(input[i]) || input[i]=='_' || input[i]=='-')
-      {
-         output[j]=input[i];
-      }
-      else
-         j--;
-      if (j>=output_size)
-         break;
-   }
-   output[j]=0;
-   if (assert_size)
-      output[assert_size]=0;
-   //std::cout<<"\t\t"<<output.c_str()<<std::endl;
-   return output;
-}
 
 //Data as transmitted
 template<typename T>
-struct LVDATA {
+class LVDATA {
+   public:
    //LabVIEW formatted time... (128bit)
    //Note! LabVIEW timestamp is Big Endian...
    //(i64) seconds since the epoch 01/01/1904 00:00:00.00 UTC (using the Gregorian calendar and ignoring leap seconds),
@@ -64,163 +37,58 @@ struct LVDATA {
    //(u64) positive fractions of a second 
    uint64_t FineTime;
    T DATA[];
-   uint32_t GetHeaderSize() const
-   {
-      return sizeof(CoarseTime)
-             + sizeof(FineTime);
-   }
-   uint32_t GetEntries(uint32_t size) const
-   {
-      return (size-GetHeaderSize())/sizeof(T);
-   }
-   void print(uint32_t size, bool LittleEndian, bool IsString=false)
-   {
-      std::cout<<"   Coarse Time:"<<GetLabVIEWCoarseTime()<<std::endl;
-      std::cout<<"   Unix Time:"<<GetUnixTimestamp()<<std::endl;;
-      std::cout<<"   Fine Time:"<<GetLabVIEWFineTime()<<std::endl;
-      uint32_t data_points=GetEntries(size);
-      std::cout<<"   size:"<<data_points<<std::endl;
-      if (IsString)
-      {
-         std::cout<<"DATA:";
-         for (int i=0; i<data_points; i++)
-         {
-            if (DATA[i])
-               std::cout<<DATA[i];
-            else
-               std::cout<<"NULL";
-         }
-         std::cout<<std::endl;
-         return;
-      }
-      if (LittleEndian)
-         for (int i=0; i<data_points; i++)
-            if (DATA[i])
-               std::cout<<"   DATA["<<i<<"]="<<DATA[i]<<std::endl;
-            else
-               std::cout<<"   DATA["<<i<<"]="<<"NULL"<<std::endl;
-            
-      else
-         for (int i=0; i<data_points; i++)
-            std::cout<<"   DATA["<<i<<"]="<<change_endian(DATA[i])<<std::endl;
-   }
+   void print(uint32_t size, bool LittleEndian, bool IsString=false);
+   uint32_t GetHeaderSize() const            { return sizeof(CoarseTime) + sizeof(FineTime); }
+   uint32_t GetEntries(uint32_t size) const  { return (size-GetHeaderSize())/sizeof(T);      }
+   
    //LabVIEW timestamp is Big Endian... convert when reading, store as orignal data (BigEndian)
-   const int64_t GetLabVIEWCoarseTime() const
-   {
-      return change_endian(CoarseTime);
-   }
-   const uint64_t GetLabVIEWFineTime() const
-   {
-      return change_endian(FineTime);
-   }
-   const int64_t GetUnixTimestamp() const 
-   {
-      return change_endian(CoarseTime)-2082844800;
-   }
+   const int64_t GetLabVIEWCoarseTime() const { return change_endian(CoarseTime);            }
+   const uint64_t GetLabVIEWFineTime() const  { return change_endian(FineTime);              }
+   const int64_t GetUnixTimestamp() const     { return change_endian(CoarseTime)-2082844800; }
 };
 
 //Data is held in memory on node
-struct BANK_TITLE {
+class BANK_TITLE {
+   public:
    char BANK[4]={0}; //LVB1
    char DATATYPE[4]={0}; //DBLE, UINT, INT6, INT3, INT1, INT8, CHAR
    char VARCATEGORY[16]={0};
    char VARNAME[16]={0};
-   void print() const
-   {
-      printf("  BANK:%.4s\n",BANK);
-      printf("  DATATYPE:%.4s\n",DATATYPE);
-      printf("  Variable:%.16s/%.16s\n",SanitiseBankString(VARCATEGORY,sizeof(VARCATEGORY)).c_str(),SanitiseBankString(VARNAME,sizeof(VARNAME)).c_str());
-   }
+   char EquipmentType[32]={0};
+   void print() const;
+   std::string SanitiseBankString(const char* input, int assert_size=0) const;
+   std::string GetCategoryName() const  { return SanitiseBankString(VARCATEGORY,sizeof(VARCATEGORY));     }
+   std::string GetVariableName() const  { return SanitiseBankString(VARNAME,sizeof(VARNAME));             }
+   std::string GetEquipmentType() const { return SanitiseBankString(EquipmentType,sizeof(EquipmentType)); }
 };
-enum LVEndianess { BigEndian, NativeEndian, LittleEndian};
+
 template<typename T>
-struct LVBANK {
+class LVBANK {
+   public:
+   enum LVEndianess { BigEndian, NativeEndian, LittleEndian};
    BANK_TITLE NAME;
-   char EquipmentType[32];
    uint32_t HistoryRate;
    uint32_t DataEndianess;
    uint32_t BlockSize;
    uint32_t NumberOfEntries;
    LVDATA<T> DATA[];
-   void printheader() const
-   {
-      NAME.print();
-      std::cout<<"  EquipmentType:"<<EquipmentType<<std::endl;
-      std::cout<<"  HistoryRate:"<<HistoryRate<<std::endl;
-      std::cout<<"  DataEndianess:"<<DataEndianess<<std::endl;
-      std::cout<<"  BlockSize:"<<BlockSize<<std::endl;
-      std::cout<<"  NumberOfEntries:"<<NumberOfEntries<<std::endl;
-   }
-   void print() const
-   {
-      printheader();
-      bool IsString=false;
-      if (strncmp(NAME.DATATYPE,"STR",3)==0)
-         IsString=true;
-      for (int i=0; i<NumberOfEntries; i++)
-      {
-         char* buf=(char*)&DATA;
-         LVDATA<T>* data=(LVDATA<T>*)buf;
-         data->print(BlockSize, (DataEndianess==LVEndianess::LittleEndian),IsString);
-         buf+=BlockSize;
-      }
-   }
-   std::string GetCategoryName() const
-   {
-      return SanitiseBankString(NAME.VARCATEGORY,sizeof(NAME.VARCATEGORY));
-   }
-   std::string GetVarName() const
-   {
-      return SanitiseBankString(NAME.VARNAME,sizeof(NAME.VARNAME));
-   }
-   uint32_t GetHeaderSize()
-   {
-      return sizeof(NAME)
-             + sizeof(EquipmentType)
-             + sizeof(HistoryRate)
-             + sizeof(DataEndianess)
-             + sizeof(BlockSize)
-             + sizeof(NumberOfEntries);
-   }
-   uint32_t GetTotalSize()
-   {
-      return GetHeaderSize()+BlockSize*NumberOfEntries;
-   }
-   void ClearHeader()
-   {
-      //Char arrays are NULL terminated... so NULL the first character
-      NAME.BANK[0]=0;
-      NAME.DATATYPE[0]=0;
-      NAME.VARCATEGORY[0]=0;
-      NAME.VARNAME[0]=0;
-      EquipmentType[0]=0;
-      HistoryRate=0;
-      DataEndianess=-1;
-      BlockSize=-1;
-      NumberOfEntries=-1;
-   }
-   const LVDATA<T>* GetFirstDataEntry() const
-   {
-      return &DATA[0];
-   }
-   const LVDATA<T>* GetLastDataEntry() const
-   {
-      char* ptr=(char*)&DATA;
-      ptr+=BlockSize*(NumberOfEntries-1);
-      return (LVDATA<T>*)ptr;
-   }
-   const int64_t GetFirstUnixTimestamp() const 
-   {
-      return GetFirstDataEntry()->GetUnixTimestamp();
-   }
-   const int64_t GetLastUnixTimestamp() const 
-   {
-      return GetLastDataEntry()->GetUnixTimestamp();
-   }
 
+   void printheader() const;
+   void print() const;
+   std::string GetCategoryName() const  { return NAME.GetCategoryName();  }
+   std::string GetVariableName() const  { return NAME.GetVariableName();  }
+   std::string GetEquipmentType() const { return NAME.GetEquipmentType(); }
+   uint32_t GetHeaderSize();
+   uint32_t GetTotalSize(); //Size including header
+   void ClearHeader();
+   const LVDATA<T>* GetFirstDataEntry() const;
+   const int64_t GetFirstUnixTimestamp() const { return GetFirstDataEntry()->GetUnixTimestamp(); }
+   const LVDATA<T>* GetLastDataEntry() const;
+   const int64_t GetLastUnixTimestamp() const  { return GetLastDataEntry()->GetUnixTimestamp();  }
 };
 
-struct LVBANKARRAY {
+class LVBANKARRAY {
+   public:
    char BANK[4];
    uint32_t BankArrayID;
    uint32_t BlockSize;
@@ -233,27 +101,10 @@ struct LVBANKARRAY {
    }
    uint32_t GetTotalSize()
    {
-      //std::cout<<"Header size:"<<GetHeaderSize()<<std::endl;
-      //std::cout<<"Block size: "<<BlockSize<<std::endl;
       return GetHeaderSize()+BlockSize;
    }
-   void ClearHeader()
-   {
-      for (int i=0; i<4; i++)
-         BANK[i]=0;
-      BankArrayID=-1;
-      BlockSize=-1;
-      NumberOfEntries=-1;
-   }
-   void print()
-   {
-      printf("-------------------------\n");
-      printf("BANK:%.4s\n",BANK);
-      printf("BankArrayID:%u\n",BankArrayID);
-      printf("BlockSize:%u\n",BlockSize);
-      printf("NumberOfEntries:%u\n",NumberOfEntries);
-      printf("-------------------------\n");
-   }
+   void ClearHeader();
+   void print();
 };
 
 #include "msystem.h"
@@ -339,7 +190,6 @@ class AllowedHosts
    private:
    bool IsBlackListed(const char* hostname);
    bool IsGreyListed(const char* hostname);
-   
 };
 
 

@@ -6,7 +6,167 @@
 //
 #include "feLabVIEW.h"
 
+template<typename T>
+void LVDATA<T>::print(uint32_t size, bool LittleEndian, bool IsString) 
+{
+   std::cout<<"   Coarse Time:"<<GetLabVIEWCoarseTime()<<std::endl;
+   std::cout<<"   Unix Time:"<<GetUnixTimestamp()<<std::endl;;
+   std::cout<<"   Fine Time:"<<GetLabVIEWFineTime()<<std::endl;
+   uint32_t data_points=GetEntries(size);
+   std::cout<<"   size:"<<data_points<<std::endl;
+   if (IsString)
+   {
+      std::cout<<"DATA:";
+      for (int i=0; i<data_points; i++)
+      {
+         if (DATA[i])
+            std::cout<<DATA[i];
+         else
+            std::cout<<"NULL";
+      }
+      std::cout<<std::endl;
+      return;
+   }
+   if (LittleEndian)
+      for (int i=0; i<data_points; i++)
+      {
+         if (DATA[i])
+            std::cout<<"   DATA["<<i<<"]="<<DATA[i]<<std::endl;
+         else
+            std::cout<<"   DATA["<<i<<"]="<<"NULL"<<std::endl;         
+      }
+   else
+      for (int i=0; i<data_points; i++)
+      {
+         std::cout<<"   DATA["<<i<<"]="<<change_endian(DATA[i])<<std::endl;
+      }
+}
+   
+void BANK_TITLE::print() const
+{
+   printf("  BANK:%.4s\n",BANK);
+   printf("  DATATYPE:%.4s\n",DATATYPE);
+   printf("  Variable:%.16s/%.16s\n",GetCategoryName().c_str(),GetVariableName().c_str());
+   printf("  EquipmentType:%.32s\n",GetEquipmentType().c_str());
+}
+std::string BANK_TITLE::SanitiseBankString(const char* input, int assert_size) const
+{
+   //std::cout<<input;
+   const int input_size=strlen(input);
+   int output_size=input_size;
+   if (assert_size)
+      output_size=assert_size;
+   std::string output;
+   output.resize(output_size);
+   
+   int i,j;
+   for (i = 0, j = 0; i<input_size; i++,j++)
+   {
+      if (isalnum(input[i]) || input[i]=='_' || input[i]=='-')
+      {
+         output[j]=input[i];
+      }
+      else
+         j--;
+      if (j>=output_size)
+         break;
+   }
+   output[j]=0;
+   if (assert_size)
+      output[assert_size]=0;
+   //std::cout<<"\t\t"<<output.c_str()<<std::endl;
+   return output;
+}  
 
+template<typename T>
+void LVBANK<T>::printheader() const
+{
+   NAME.print();
+   std::cout<<"  HistoryRate:"<<HistoryRate<<std::endl;
+   std::cout<<"  DataEndianess:"<<DataEndianess<<std::endl;
+   std::cout<<"  BlockSize:"<<BlockSize<<std::endl;
+   std::cout<<"  NumberOfEntries:"<<NumberOfEntries<<std::endl;
+}
+
+template<typename T>
+void LVBANK<T>::print() const
+{
+   printheader();
+   bool IsString=false;
+   if (strncmp(NAME.DATATYPE,"STR",3)==0)
+      IsString=true;
+   for (int i=0; i<NumberOfEntries; i++)
+   {
+      char* buf=(char*)&DATA;
+      LVDATA<T>* data=(LVDATA<T>*)buf;
+      data->print(BlockSize, (DataEndianess==LVEndianess::LittleEndian),IsString);
+      buf+=BlockSize;
+   }
+}
+
+template<typename T>
+uint32_t LVBANK<T>::GetHeaderSize()
+{
+   return sizeof(NAME)
+          + sizeof(HistoryRate)
+          + sizeof(DataEndianess)
+          + sizeof(BlockSize)
+          + sizeof(NumberOfEntries);
+}
+
+template<typename T>
+uint32_t LVBANK<T>::GetTotalSize()
+{
+   return GetHeaderSize()+BlockSize*NumberOfEntries;
+}
+
+template<typename T>
+void LVBANK<T>::ClearHeader()
+{
+   //Char arrays are NULL terminated... so NULL the first character
+   NAME.BANK[0]=0;
+   NAME.DATATYPE[0]=0;
+   NAME.VARCATEGORY[0]=0;
+   NAME.VARNAME[0]=0;
+   NAME.EquipmentType[0]=0;
+   HistoryRate=0;
+   DataEndianess=-1;
+   BlockSize=-1;
+   NumberOfEntries=-1;
+}
+
+template<typename T>
+const LVDATA<T>* LVBANK<T>::GetFirstDataEntry() const
+{
+   return &DATA[0];
+}
+
+template<typename T>
+const LVDATA<T>* LVBANK<T>::GetLastDataEntry() const
+{
+   char* ptr=(char*)&DATA;
+   ptr+=BlockSize*(NumberOfEntries-1);
+   return (LVDATA<T>*)ptr;
+}
+
+void LVBANKARRAY::ClearHeader()
+{
+   for (int i=0; i<4; i++)
+      BANK[i]=0;
+   BankArrayID=-1;
+   BlockSize=-1;
+   NumberOfEntries=-1;
+}
+
+void LVBANKARRAY::print()
+{
+   printf("-------------------------\n");
+   printf("BANK:%.4s\n",BANK);
+   printf("BankArrayID:%u\n",BankArrayID);
+   printf("BlockSize:%u\n",BlockSize);
+   printf("NumberOfEntries:%u\n",NumberOfEntries);
+   printf("-------------------------\n");
+}
 
 
 //--------------------------------------------------
@@ -236,7 +396,7 @@ template<typename T>
 HistoryVariable::HistoryVariable(const LVBANK<T>* lvbank, TMFE* mfe )
 {
    fCategory=lvbank->GetCategoryName();
-   fVarName=lvbank->GetVarName();
+   fVarName=lvbank->GetVariableName();
    UpdateFrequency=lvbank->HistoryRate;
    fLastUpdate=0;
    //Prepare ODB entry for variable
@@ -256,7 +416,7 @@ bool HistoryVariable::IsMatch(const LVBANK<T>* lvbank)
 {
    if (strcmp(fCategory.c_str(),lvbank->GetCategoryName().c_str())!=0)
       return false;
-   if (strcmp(fVarName.c_str(),lvbank->GetVarName().c_str())!=0)
+   if (strcmp(fVarName.c_str(),lvbank->GetVariableName().c_str())!=0)
       return false;
    return true;
 }
@@ -304,7 +464,7 @@ HistoryVariable* HistoryLogger::AddNewVariable(const LVBANK<T>* lvbank)
    char VarAndCategory[32];
    sprintf(VarAndCategory,"%s/%s",
                     lvbank->GetCategoryName().c_str(),
-                    lvbank->GetVarName().c_str());
+                    lvbank->GetVariableName().c_str());
    fEq->fOdbEqSettings->WSAI("feVariables",fVariables.size(), VarAndCategory);
    fEq->fOdbEqSettings->WU32AI("DateAdded",(int)fVariables.size(), lvbank->GetFirstUnixTimestamp());
    
@@ -312,7 +472,7 @@ HistoryVariable* HistoryLogger::AddNewVariable(const LVBANK<T>* lvbank)
    fVariables.push_back(new HistoryVariable(lvbank,fMfe));
    //Announce in control room new variable is logging
    char message[100];
-   sprintf(message,"New variable [%s] in category [%s] being logged",lvbank->GetVarName().c_str(),lvbank->GetCategoryName().c_str());
+   sprintf(message,"New variable [%s] in category [%s] being logged",lvbank->GetVariableName().c_str(),lvbank->GetCategoryName().c_str());
    fMfe->Msg(MTALK, "feLabVIEW", message);
    //Return pointer to this variable so the history can be updated by caller function
    return fVariables.back();
@@ -559,17 +719,6 @@ void feLabVIEWClass::HandleStrBank(LVBANK<char>* bank)
       message.QueueData("SendToPort",log_to_port);
    }
    //Put every UTF-8 character into a string and send it as JSON
-   else if (strncmp(bank->NAME.VARNAME,"TEST_JSON",9)==0)
-   {
-      std::cout<<"FUCK"<<std::endl;
-      char data[512];
-      for (int i=0; i<512; i++)
-      {
-         data[i]=(char)i;
-      }
-      std::cout<<data<<std::endl<<std::endl;
-      message.QueueData("TestJson",data,512);
-   }
    else
    {
       std::cout<<"String not understood!"<<std::endl;
