@@ -295,7 +295,10 @@ bool AllowedHosts::IsAllowed(const char* hostname)
    if (IsBlackListed(hostname))
       return false;
    if (IsGreyListed(hostname))
-      return true;  
+      return true; 
+   //I should never get this far:
+   assert("LOGIC_FAILED");
+   return false;
 }
 
 bool AllowedHosts::IsWhiteListed(const char* hostname)
@@ -737,6 +740,9 @@ void feLabVIEWClass::LogBank(const char* buf)
    } else if (strncmp(ThisBank->NAME.DATATYPE,"FLT",3)==0) {
       LVBANK<float>* bank=(LVBANK<float>*)buf;
       logger.Update(bank);
+   } else if (strncmp(ThisBank->NAME.DATATYPE,"BOOL",4)==0) {
+      LVBANK<bool>* bank=(LVBANK<bool>*)buf;
+      logger.Update(bank);
    //Not supported by ODB
    /*} else if (strncmp(ThisBank->NAME.DATATYPE,"I64",3)==0) {
       LVBANK<int64_t>* bank=(LVBANK<int64_t>*)buf;
@@ -748,17 +754,17 @@ void feLabVIEWClass::LogBank(const char* buf)
       LVBANK<int32_t>* bank=(LVBANK<int32_t>*)buf;
       logger.Update(bank);
    } else if (strncmp(ThisBank->NAME.DATATYPE,"UI32",4)==0) {
-      LVBANK<int32_t>* bank=(LVBANK<int32_t>*)buf;
+      LVBANK<uint32_t>* bank=(LVBANK<uint32_t>*)buf;
       //bank->print();
       logger.Update(bank);
    //Not supported by ODB
    /*} else if (strncmp(ThisBank->NAME.DATATYPE,"I16",3)==0) {
       LVBANK<int16_t>* bank=(LVBANK<int16_t>*)buf;
-      logger.Update(bank);
+      logger.Update(bank);*/
    } else if (strncmp(ThisBank->NAME.DATATYPE,"U16",3)==0) {
       LVBANK<uint16_t>* bank=(LVBANK<uint16_t>*)buf;
       logger.Update(bank);
-   } else if (strncmp(ThisBank->NAME.DATATYPE,"I8",2)==0) {
+   /*} else if (strncmp(ThisBank->NAME.DATATYPE,"I8",2)==0) {
       LVBANK<int8_t>* bank=(LVBANK<int8_t>*)buf;
       logger.Update(bank);
    } else if (strncmp(ThisBank->NAME.DATATYPE,"U8",2)==0) {
@@ -852,8 +858,12 @@ void feLabVIEWClass::HandlePeriodic()
    }
    //Security: Check if host in in allowed host lists
    char hostname[200];
+   char servname[200];
    int name_status=getnameinfo((struct sockaddr *)&address, addrlen,
-                    hostname, 200,NULL,NULL,0);
+                    hostname, 200,servname,200,0);
+   //Returned 0 on success
+   if (name_status)
+      return;
    bool allowed=false;
    if (feLabVIEWClassType==WORKER)
    {

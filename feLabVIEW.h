@@ -147,17 +147,11 @@ class AllowedHosts
          return std::chrono::duration<double, std::milli>(t-LastContact).count();
       }
      double TimeSinceLastContact()
-       {
+      {
          return TimeSince(std::chrono::high_resolution_clock::now());
       }
-      bool operator==(const char* hostname) const
-      {
-         return (strcmp(HostName.c_str(),hostname)==0);
-      }
-      bool operator==(const Host & rhs) const
-      {   
-         return HostName==rhs.HostName;
-      }
+      bool operator==(const char* hostname) const { return (strcmp(HostName.c_str(),hostname)==0); }
+      bool operator==(const Host & rhs) const     { return HostName==rhs.HostName;                 }
       void print()
       {
          std::cout<<"HostName:\t"<<HostName<<"\n";
@@ -191,8 +185,6 @@ class AllowedHosts
    bool IsBlackListed(const char* hostname);
    bool IsGreyListed(const char* hostname);
 };
-
-
 
 #include <chrono>
 class HistoryVariable
@@ -240,14 +232,14 @@ class HistoryVariable
       }
       fOdbEqVariables->WSA(fVarName.c_str(),array,max_size);
    }
-   /*void WriteODB(std::vector<int16_t>& data)
+   void WriteODB(std::vector<uint16_t>& data)
    {
       fOdbEqVariables->WU16A(fVarName.c_str(),data);
-   }*/
-   /*void WriteODB(std::vector<int32_t>& data)
+   }
+   void WriteODB(std::vector<uint32_t>& data)
    {
-      fOdbEqVariables->WU32A(fVarName.c_str(),data)
-   }*/
+      fOdbEqVariables->WU32A(fVarName.c_str(),data);
+   }
 };
 
 
