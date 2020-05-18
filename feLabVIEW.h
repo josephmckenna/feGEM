@@ -99,6 +99,7 @@ class LVBANKARRAY {
    {
       return sizeof(BANK)+sizeof(BankArrayID)+sizeof(BlockSize)+sizeof(NumberOfEntries);
    }
+
    uint32_t GetTotalSize()
    {
       return GetHeaderSize()+BlockSize;
@@ -106,7 +107,6 @@ class LVBANKARRAY {
    void ClearHeader();
    void print();
 };
-
 #include "msystem.h"
 
 
@@ -137,27 +137,12 @@ class AllowedHosts
       const std::string HostName;
       int RejectionCount;
       std::chrono::time_point<std::chrono::system_clock> LastContact;
-      Host(const char* hostname): HostName(hostname)
-      {
-         RejectionCount=0;
-         LastContact=std::chrono::high_resolution_clock::now();
-      }
-      double TimeSince(std::chrono::time_point<std::chrono::system_clock> t)
-      {
-         return std::chrono::duration<double, std::milli>(t-LastContact).count();
-      }
-     double TimeSinceLastContact()
-      {
-         return TimeSince(std::chrono::high_resolution_clock::now());
-      }
+      Host(const char* hostname);
+      double TimeSince(std::chrono::time_point<std::chrono::system_clock> t);
+      double TimeSinceLastContact();
       bool operator==(const char* hostname) const { return (strcmp(HostName.c_str(),hostname)==0); }
       bool operator==(const Host & rhs) const     { return HostName==rhs.HostName;                 }
-      void print()
-      {
-         std::cout<<"HostName:\t"<<HostName<<"\n";
-         std::cout<<"RejectionCount:\t"<<RejectionCount<<"\n";
-         std::cout<<"Last rejection:\t"<< TimeSinceLastContact()*1000.<<"s ago"<<std::endl;
-      }
+      void print();
    };
    private:
    std::mutex list_lock;
@@ -329,10 +314,10 @@ public:
    std::string HandleRpc(const char* cmd, const char* args);
    void HandleBeginRun();
    void HandleEndRun();
-   void HandleStrBank(LVBANK<char>* bank);
-   void LogBank(const char* buf);
-   void HandleBankArray(char * ptr);
-   void HandleBank(char * ptr);
+   void HandleStrBank(LVBANK<char>* bank,const char* hostname);
+   void LogBank(const char* buf,const char* hostname);
+   int HandleBankArray(const char * ptr,const char* hostname);
+   int HandleBank(const char * ptr,const char* hostname);
 
    void HandlePeriodic();
 };

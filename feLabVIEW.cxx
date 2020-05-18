@@ -6,6 +6,13 @@
 //
 #include "feLabVIEW.h"
 
+//--------------------------------------------------
+// LVDATA object
+// A class to contain the raw data we want to log
+// Contents: I have a timestamp and an array
+//--------------------------------------------------
+
+
 template<typename T>
 void LVDATA<T>::print(uint32_t size, bool LittleEndian, bool IsString) 
 {
@@ -41,7 +48,8 @@ void LVDATA<T>::print(uint32_t size, bool LittleEndian, bool IsString)
          std::cout<<"   DATA["<<i<<"]="<<change_endian(DATA[i])<<std::endl;
       }
 }
-   
+
+
 void BANK_TITLE::print() const
 {
    printf("  BANK:%.4s\n",BANK);
@@ -77,6 +85,16 @@ std::string BANK_TITLE::SanitiseBankString(const char* input, int assert_size) c
    //std::cout<<"\t\t"<<output.c_str()<<std::endl;
    return output;
 }  
+
+//--------------------------------------------------
+// LVBANK object
+// A class to contain a bundle of LVDATA objects
+// Contents:
+//    Variable, Category and Equipment names
+//    The rate to log to history
+//    The endianess of the LVDATA data
+//    Size
+//--------------------------------------------------
 
 template<typename T>
 void LVBANK<T>::printheader() const
@@ -148,6 +166,15 @@ const LVDATA<T>* LVBANK<T>::GetLastDataEntry() const
    ptr+=BlockSize*(NumberOfEntries-1);
    return (LVDATA<T>*)ptr;
 }
+
+//--------------------------------------------------
+// LVBANKARRAY object
+// A simple contaner to hold an array of LVBANKs
+// Contents:
+//    BANK array ID number
+//    Array of LVBANKs
+//    Size
+//--------------------------------------------------
 
 void LVBANKARRAY::ClearHeader()
 {
@@ -252,9 +279,34 @@ std::string MessageHandler::ReadMessageQueue()
 }
 
 //--------------------------------------------------
-// Message Handler Class
+// Allowed Hosts class 
+//          Contents: White listed hosts, grey listed hosts and black listed hosts
+//     |-->Host class: 
+//          Contents: Hostname, Rejection Counter and Last Contact time
 // Thread safe class to monitor host permissions
 //--------------------------------------------------
+AllowedHosts::Host::Host(const char* hostname): HostName(hostname)
+{
+   RejectionCount=0;
+   LastContact=std::chrono::high_resolution_clock::now();
+}
+
+double AllowedHosts::Host::TimeSince(std::chrono::time_point<std::chrono::system_clock> t)
+{
+   return std::chrono::duration<double, std::milli>(t-LastContact).count();
+}
+
+double AllowedHosts::Host::TimeSinceLastContact()
+{
+   return TimeSince(std::chrono::high_resolution_clock::now());
+}
+
+void AllowedHosts::Host::print()
+{
+   std::cout<<"HostName:\t"<<HostName<<"\n";
+   std::cout<<"RejectionCount:\t"<<RejectionCount<<"\n";
+   std::cout<<"Last rejection:\t"<< TimeSinceLastContact()*1000.<<"s ago"<<std::endl;
+}
 
 AllowedHosts::AllowedHosts(TMFE* mfe): cool_down_time(1000), retry_limit(10)
 {
@@ -305,7 +357,7 @@ bool AllowedHosts::IsWhiteListed(const char* hostname)
 {
    //std::cout<<"Looking for host:"<<hostname<<std::endl;
    std::lock_guard<std::mutex> lock(list_lock);
-   for (auto host: white_list)
+   for (auto& host: white_list)
    {
       //host.print();
       if (host==hostname)
@@ -322,7 +374,6 @@ bool AllowedHosts::AddHost(const char* hostname)
       std::lock_guard<std::mutex> lock(list_lock);
       white_list.push_back(Host(hostname));
       }
-      std::cout<<"DAVE"<<hostname<<std::endl;
       fOdbEqSettings->WSAI("allowed_hosts",(int)white_list.size(), hostname);
       //True for new item added
       return true;
@@ -394,7 +445,11 @@ bool AllowedHosts::IsGreyListed(const char* hostname)
    grey_list.push_back(Host(hostname));
    return true;
 }
-
+//--------------------------------------------------
+// History Variable
+// Hold link to ODB path of variable
+// Monitor the last time we updated the ODB (only update at the periodicity specificed in LVBANK)
+//--------------------------------------------------
 template<typename T>
 HistoryVariable::HistoryVariable(const LVBANK<T>* lvbank, TMFE* mfe )
 {
@@ -442,6 +497,7 @@ void HistoryVariable::Update(const LVBANK<T>* lvbank)
 
 //--------------------------------------------------
 // History Logger Class
+// Hold array of unique HistoryVariables 
 //--------------------------------------------------
 
 HistoryLogger::HistoryLogger(TMFE* mfe,TMFeEquipment* eq)
@@ -449,6 +505,7 @@ HistoryLogger::HistoryLogger(TMFE* mfe,TMFeEquipment* eq)
    fEq=eq;
    fMfe=mfe;
 }
+
 HistoryLogger::~HistoryLogger()
 {
    //I do not own fMfe or fEq
@@ -456,6 +513,7 @@ HistoryLogger::~HistoryLogger()
       delete var;
    fVariables.clear();
 }
+
 template<typename T>
 HistoryVariable* HistoryLogger::AddNewVariable(const LVBANK<T>* lvbank)
 {
@@ -480,6 +538,7 @@ HistoryVariable* HistoryLogger::AddNewVariable(const LVBANK<T>* lvbank)
    //Return pointer to this variable so the history can be updated by caller function
    return fVariables.back();
 }
+
 template<typename T>
 HistoryVariable* HistoryLogger::Find(const LVBANK<T>* lvbank, bool AddIfNotFound=true)
 {
@@ -500,6 +559,7 @@ HistoryVariable* HistoryLogger::Find(const LVBANK<T>* lvbank, bool AddIfNotFound
    }
    return FindThis;
 }
+
 template<typename T>
 void HistoryLogger::Update(const LVBANK<T>* lvbank)
 {
@@ -509,6 +569,10 @@ void HistoryLogger::Update(const LVBANK<T>* lvbank)
 
 //--------------------------------------------------
 // PeriodicityManager Class
+// A class to update the rate at which we poll the Periodic() function
+// Data Packers send data once per second... 
+// By default poll once per second, poll at 1/ Number of connections + 1 seconds
+// Ie Match the number of connections and keep one Periodic() per second free for new connections
 //--------------------------------------------------
 
 PeriodicityManager::PeriodicityManager(TMFE* mfe,TMFeEquipment* eq)
@@ -612,6 +676,14 @@ void PeriodicityManager::ProcessMessage(LVBANK<char>* bank)
    return;
 }
 
+//--------------------------------------------------
+// Base class for LabVIEW frontend
+// Child classes:
+//    feLabVIEW supervisor (recieves new connections and refers a host to a worker)
+//    feLabVIEW worker (one worker per host)
+//--------------------------------------------------
+
+
 std::string feLabVIEWClass::HandleRpc(const char* cmd, const char* args)
 {
    fMfe->Msg(MINFO, "HandleRpc", "RPC cmd [%s], args [%s]", cmd, args);
@@ -634,7 +706,7 @@ void feLabVIEWClass::HandleEndRun()
    RunStatus=Stopped;
 }
 
-void feLabVIEWClass::HandleStrBank(LVBANK<char>* bank)
+void feLabVIEWClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
 {
    if (strncmp(bank->NAME.VARNAME,"TALK",4)==0)
    {
@@ -700,7 +772,19 @@ void feLabVIEWClass::HandleStrBank(LVBANK<char>* bank)
    }
    else if (strncmp(bank->NAME.VARNAME,"ALLOW_HOST",14)==0)
    {
+      if (strcmp(bank->DATA->DATA,hostname)!=0)
+      {
+         fMfe->Msg(MTALK, "feLabVIEW", "LabVIEW host name %s does not match DNS lookup %s",bank->DATA->DATA,hostname);
+         allowed_hosts->AddHost(hostname);
+      }
       allowed_hosts->AddHost(bank->DATA->DATA);
+      return;
+   }
+   else if (strncmp(bank->NAME.VARNAME,"ALLOW_SSH_TUNNEL",14)==0)
+   {
+      // We do not know the name of the host yet... they will reconnect on a new port...
+      // and, for example, lxplus might have a new alias)
+      allowed_hosts->AddHost(hostname);
       return;
    }
    else if (strncmp(bank->NAME.VARNAME,"GIVE_ME_ADDRESS",15)==0)
@@ -730,7 +814,7 @@ void feLabVIEWClass::HandleStrBank(LVBANK<char>* bank)
    logger.Update(bank);
 }
 
-void feLabVIEWClass::LogBank(const char* buf)
+void feLabVIEWClass::LogBank(const char* buf, const char* hostname)
 {
    LVBANK<void*>* ThisBank=(LVBANK<void*>*)buf;
    if (strncmp(ThisBank->NAME.DATATYPE,"DBL",3)==0) {
@@ -773,7 +857,7 @@ void feLabVIEWClass::LogBank(const char* buf)
    
    } else if (strncmp(ThisBank->NAME.DATATYPE,"STR",3)==0) {
       LVBANK<char>* bank=(LVBANK<char>*)buf;
-      return HandleStrBank(bank);
+      return HandleStrBank(bank,hostname);
    } else {
       std::cout<<"Unknown bank data type... "<<std::endl;
       ThisBank->print();
@@ -782,7 +866,7 @@ void feLabVIEWClass::LogBank(const char* buf)
    return;
 }
 
-void feLabVIEWClass::HandleBankArray(char * ptr)
+int feLabVIEWClass::HandleBankArray(const char * ptr,const char* hostname)
 {
    LVBANKARRAY* array=(LVBANKARRAY*)ptr;
    if (array->GetTotalSize() > (uint32_t)fEventSize)
@@ -793,20 +877,20 @@ void feLabVIEWClass::HandleBankArray(char * ptr)
                      array->BlockSize + array->GetHeaderSize(),
                      fEventSize);
       message.QueueError(error);
-      return;
+      return -1;
    }
    //array->print();
    char *buf=(char*)&array->DATA[0];
    for (uint32_t i=0; i<array->NumberOfEntries; i++)
    {
       LVBANK<double>* bank=(LVBANK<double>*)buf;
-      LogBank(buf);
+      HandleBank(buf, hostname);
       buf+=bank->GetHeaderSize()+bank->BlockSize*bank->NumberOfEntries;
    }
-   return;
+   return array->NumberOfEntries;
 }
 
-void feLabVIEWClass::HandleBank(char * ptr)
+int feLabVIEWClass::HandleBank(const char * ptr,const char* hostname)
 {
    //Use invalid data type to probe the header
    LVBANK<void*>* ThisBank=(LVBANK<void*>*)ptr;
@@ -819,10 +903,10 @@ void feLabVIEWClass::HandleBank(char * ptr)
                      ThisBank->GetTotalSize(),
                      fEventSize);
       message.QueueError(error);
-      return;
+      return -1;
    }
-   LogBank(ptr);
-   return;
+   LogBank(ptr,hostname);
+   return 1;
 }
 void feLabVIEWClass::HandlePeriodic()
 {
@@ -868,7 +952,8 @@ void feLabVIEWClass::HandlePeriodic()
    if (feLabVIEWClassType==WORKER)
    {
       //Only white listed hosts allow on worker
-      allowed=allowed_hosts->IsWhiteListed(hostname);
+      allowed=allowed_hosts->IsAllowed(hostname);
+      //allowed=allowed_hosts->IsWhiteListed(hostname);
    }
    else if (feLabVIEWClassType==SUPERVISOR)
    {
@@ -970,15 +1055,15 @@ void feLabVIEWClass::HandlePeriodic()
       legal_message=true;
    assert(BankSize==position);
    read_status=position;
-   
+   int nbanks=0;
    //Process what we have read into the MIDAS bank
    //printf ("[%s] Received %c%c%c%c (%d bytes)",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],read_status);
    if (strncmp(ptr,"PYA1",4)==0 || strncmp(ptr,"LVA1",4)==0) {
       //std::cout<<"["<<fEq->fName.c_str()<<"] Python / LabVIEW Bank Array found!"<<std::endl;
-      HandleBankArray(ptr); //Iterates over array with HandleBank()
+      nbanks=HandleBankArray(ptr,hostname); //Iterates over array with HandleBank()
    } else if (strncmp(ptr,"PYB1",4)==0 || strncmp(ptr,"LVB1",4)==0 ) {
       //std::cout<<"["<<fEq->fName.c_str()<<"] Python / LabVIEW Bank found!"<<std::endl;
-      HandleBank(ptr);
+      nbanks=HandleBank(ptr,hostname);
    } else {
       std::cout<<"["<<fEq->fName.c_str()<<"] Unknown data type just received... "<<std::endl;
       message.QueueError("Unknown data type just received... ");
@@ -996,7 +1081,7 @@ void feLabVIEWClass::HandlePeriodic()
    std::chrono::time_point<std::chrono::system_clock> timer_stop=std::chrono::high_resolution_clock::now();
    std::chrono::duration<double, std::milli> handlingtime=timer_stop - timer_start;
    //std::cout<<"["<<fEq->fName.c_str()<<"] Handling time: "<<handlingtime.count()*1000 <<"ms"<<std::endl;
-   printf ("[%s] Handled %c%c%c%c (%d bytes) in %fms\n",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],read_status,handlingtime.count());
+   printf ("[%s] Handled %c%c%c%c %d banks (%d bytes) in %fms\n",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],nbanks,read_status,handlingtime.count());
    char buf[100];
    sprintf(buf,"DATA OK");
    message.QueueMessage(buf);
