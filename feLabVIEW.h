@@ -181,7 +181,7 @@ class HistoryVariable
    int UpdateFrequency;
    MVOdb* fOdbEqVariables; 
    template<typename T>
-   HistoryVariable(const LVBANK<T>* lvbank, TMFE* mfe );
+   HistoryVariable(const LVBANK<T>* lvbank, TMFE* mfe,TMFeEquipment* eq );
    template<typename T>
    bool IsMatch(const LVBANK<T>* lvbank);
    template<typename T>

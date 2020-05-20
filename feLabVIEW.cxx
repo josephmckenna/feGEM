@@ -451,17 +451,19 @@ bool AllowedHosts::IsGreyListed(const char* hostname)
 // Monitor the last time we updated the ODB (only update at the periodicity specificed in LVBANK)
 //--------------------------------------------------
 template<typename T>
-HistoryVariable::HistoryVariable(const LVBANK<T>* lvbank, TMFE* mfe )
+HistoryVariable::HistoryVariable(const LVBANK<T>* lvbank, TMFE* mfe,TMFeEquipment* eq )
 {
    fCategory=lvbank->GetCategoryName();
    fVarName=lvbank->GetVariableName();
    UpdateFrequency=lvbank->HistoryRate;
+   if (!UpdateFrequency)
+      return;
    fLastUpdate=0;
    //Prepare ODB entry for variable
    MVOdb* OdbEq = NULL;
    if (strncmp(lvbank->GetCategoryName().c_str(),"THISHOST",8)==0)
    {
-      OdbEq = mfe->fOdbRoot->Chdir((std::string("Equipment/") + mfe->fFrontendName).c_str(), true);
+      OdbEq = mfe->fOdbRoot->Chdir((std::string("Equipment/") + eq->fName).c_str(), true);
    }
    else
    {
@@ -530,7 +532,7 @@ HistoryVariable* HistoryLogger::AddNewVariable(const LVBANK<T>* lvbank)
    fEq->fOdbEqSettings->WU32AI("DateAdded",(int)fVariables.size(), lvbank->GetFirstUnixTimestamp());
    
    //Push into list of monitored variables
-   fVariables.push_back(new HistoryVariable(lvbank,fMfe));
+   fVariables.push_back(new HistoryVariable(lvbank,fMfe,fEq));
    //Announce in control room new variable is logging
    char message[100];
    sprintf(message,"New variable [%s] in category [%s] being logged",lvbank->GetVariableName().c_str(),lvbank->GetCategoryName().c_str());
@@ -1258,8 +1260,7 @@ const char* feLabVIEWSupervisor::AddNewClient(const char* hostname)
    if (WorkerNo.second==false)
    {
       allowed_hosts->AddHost(hostname);
-      std::string name = "fe";
-      name+="LV_";
+      std::string name = "feLV_";
       name+=hostname;
       TMFE* mfe=fMfe;
       if (name.size()>31)
