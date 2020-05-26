@@ -16,6 +16,7 @@
 #include "midas.h"
 #include "tmfe.h"
 
+enum LVEndianess { BigEndian, NativeEndian, LittleEndian};
 template <class T>
 T change_endian(T in)
 {
@@ -25,26 +26,77 @@ T change_endian(T in)
     return in;
 }
 
+class LVTimestamp {
+   public:
+      //LabVIEW formatted time... (128bit)
+      //Note! LabVIEW timestamp is Big Endian...
+      //(i64) seconds since the epoch 01/01/1904 00:00:00.00 UTC (using the Gregorian calendar and ignoring leap seconds),
+      int64_t Seconds;
+      //(u64) positive fractions of a second 
+      uint64_t SubSecondFraction;
+   public:
+   LVTimestamp(bool Now=false)
+   {
+      if (!Now) return;
+
+      using namespace std::chrono;
+
+      system_clock::time_point tp = system_clock::now();
+      system_clock::duration dtn = tp.time_since_epoch();
+                
+      Seconds=dtn.count() * system_clock::period::num / system_clock::period::den;//+2082844800;
+      
+      double fraction=(double)(dtn.count() - Seconds*system_clock::period::den / system_clock::period::num)/system_clock::period::den;
+      SubSecondFraction=fraction*(double)((uint64_t)-1);
+      //Convert from UNIX time (seconds since 1970) to LabVIEW time (seconds since 01/01/1904 )
+      Seconds+=2082844800;
+
+      //LabVIEW timestamp is big endian... conform...
+      Seconds=change_endian(Seconds);
+      SubSecondFraction=change_endian(SubSecondFraction);
+      //print();
+   }
+   void print()
+   {
+      std::cout<<"LV Seconds:\t"<<Seconds<<std::endl;
+      std::cout<<"Unix Seconds\t"<<Seconds-2082844800<<std::endl;
+      std::cout<<"Subfrac:\t"<<SubSecondFraction<<std::endl;
+   }
+};
 
 //Data as transmitted
 template<typename T>
 class LVDATA {
    public:
    //LabVIEW formatted time... (128bit)
-   //Note! LabVIEW timestamp is Big Endian...
-   //(i64) seconds since the epoch 01/01/1904 00:00:00.00 UTC (using the Gregorian calendar and ignoring leap seconds),
-   int64_t CoarseTime;
-   //(u64) positive fractions of a second 
-   uint64_t FineTime;
+   LVTimestamp timestamp;
    T DATA[];
-   void print(uint32_t size, bool LittleEndian, bool IsString=false);
-   uint32_t GetHeaderSize() const            { return sizeof(CoarseTime) + sizeof(FineTime); }
+   void print(uint32_t size, uint16_t TimestampEndianness, uint16_t DataEndianness, bool IsString);
+   uint32_t GetHeaderSize() const            { return sizeof(timestamp); }
    uint32_t GetEntries(uint32_t size) const  { return (size-GetHeaderSize())/sizeof(T);      }
    
    //LabVIEW timestamp is Big Endian... convert when reading, store as orignal data (BigEndian)
-   const int64_t GetLabVIEWCoarseTime() const { return change_endian(CoarseTime);            }
-   const uint64_t GetLabVIEWFineTime() const  { return change_endian(FineTime);              }
-   const int64_t GetUnixTimestamp() const     { return change_endian(CoarseTime)-2082844800; }
+   const int64_t GetLabVIEWCoarseTime(uint16_t Endianess) const 
+   { 
+      if (Endianess!=LittleEndian)
+         return change_endian(timestamp.Seconds);
+      else
+         return timestamp.Seconds;
+   }
+   const uint64_t GetLabVIEWFineTime(uint16_t Endianess) const
+   {
+      if (Endianess!=LittleEndian)
+         return change_endian(timestamp.SubSecondFraction);
+      else
+         return timestamp.SubSecondFraction;
+   }
+   const int64_t GetUnixTimestamp(uint16_t Endianess) const
+   {
+      if (Endianess!=LittleEndian)
+         return change_endian(timestamp.Seconds)-2082844800;
+      else
+         return timestamp.Seconds-2082844800;
+   }
 };
 
 //Data is held in memory on node
@@ -65,10 +117,10 @@ class BANK_TITLE {
 template<typename T>
 class LVBANK {
    public:
-   enum LVEndianess { BigEndian, NativeEndian, LittleEndian};
    BANK_TITLE NAME;
    uint32_t HistoryRate;
-   uint32_t DataEndianess;
+   uint16_t TimestampEndianness;
+   uint16_t DataEndianness;
    uint32_t BlockSize;
    uint32_t NumberOfEntries;
    LVDATA<T> DATA[];
@@ -82,9 +134,9 @@ class LVBANK {
    uint32_t GetTotalSize(); //Size including header
    void ClearHeader();
    const LVDATA<T>* GetFirstDataEntry() const;
-   const int64_t GetFirstUnixTimestamp() const { return GetFirstDataEntry()->GetUnixTimestamp(); }
+   const int64_t GetFirstUnixTimestamp() const { return GetFirstDataEntry()->GetUnixTimestamp(TimestampEndianness); }
    const LVDATA<T>* GetLastDataEntry() const;
-   const int64_t GetLastUnixTimestamp() const  { return GetLastDataEntry()->GetUnixTimestamp();  }
+   const int64_t GetLastUnixTimestamp() const  { return GetLastDataEntry()->GetUnixTimestamp(TimestampEndianness);  }
 };
 
 class LVBANKARRAY {
@@ -148,6 +200,8 @@ class AllowedHosts
    std::mutex list_lock;
    //Allowed hosts:
    std::vector<Host> white_list;
+   //Allowed hosts in testing mode (no ODB operations)
+   std::vector<Host> virtual_white_list;
    //Hosts with questioned behaviour
    std::list<Host> grey_list;
    //Banned hosts:

@@ -14,11 +14,11 @@
 
 
 template<typename T>
-void LVDATA<T>::print(uint32_t size, bool LittleEndian, bool IsString) 
+void LVDATA<T>::print(uint32_t size, uint16_t TimestampEndianness, uint16_t DataEndianness, bool IsString) 
 {
-   std::cout<<"   Coarse Time:"<<GetLabVIEWCoarseTime()<<std::endl;
-   std::cout<<"   Unix Time:"<<GetUnixTimestamp()<<std::endl;;
-   std::cout<<"   Fine Time:"<<GetLabVIEWFineTime()<<std::endl;
+   std::cout<<"   Coarse Time:"<<GetLabVIEWCoarseTime(TimestampEndianness)<<std::endl;
+   std::cout<<"   Unix Time:"<<GetUnixTimestamp(TimestampEndianness)<<std::endl;;
+   std::cout<<"   Fine Time:"<<GetLabVIEWFineTime(TimestampEndianness)<<std::endl;
    uint32_t data_points=GetEntries(size);
    std::cout<<"   size:"<<data_points<<std::endl;
    if (IsString)
@@ -34,7 +34,15 @@ void LVDATA<T>::print(uint32_t size, bool LittleEndian, bool IsString)
       std::cout<<std::endl;
       return;
    }
-   if (LittleEndian)
+   if (DataEndianness != LittleEndian)
+   {
+      for (int i=0; i<data_points; i++)
+      {
+         std::cout<<"   DATA["<<i<<"]="<<change_endian(DATA[i])<<std::endl;
+      }
+   }
+   else
+   {
       for (int i=0; i<data_points; i++)
       {
          if (DATA[i])
@@ -42,11 +50,7 @@ void LVDATA<T>::print(uint32_t size, bool LittleEndian, bool IsString)
          else
             std::cout<<"   DATA["<<i<<"]="<<"NULL"<<std::endl;         
       }
-   else
-      for (int i=0; i<data_points; i++)
-      {
-         std::cout<<"   DATA["<<i<<"]="<<change_endian(DATA[i])<<std::endl;
-      }
+   }
 }
 
 
@@ -101,7 +105,8 @@ void LVBANK<T>::printheader() const
 {
    NAME.print();
    std::cout<<"  HistoryRate:"<<HistoryRate<<std::endl;
-   std::cout<<"  DataEndianess:"<<DataEndianess<<std::endl;
+   std::cout<<"  TimestampEndianess"<<TimestampEndianness<<std::endl;
+   std::cout<<"  DataEndianess:"<<DataEndianness<<std::endl;
    std::cout<<"  BlockSize:"<<BlockSize<<std::endl;
    std::cout<<"  NumberOfEntries:"<<NumberOfEntries<<std::endl;
 }
@@ -117,7 +122,7 @@ void LVBANK<T>::print() const
    {
       char* buf=(char*)&DATA;
       LVDATA<T>* data=(LVDATA<T>*)buf;
-      data->print(BlockSize, (DataEndianess==LVEndianess::LittleEndian),IsString);
+      data->print(BlockSize, TimestampEndianness,DataEndianness,IsString);
       buf+=BlockSize;
    }
 }
@@ -127,7 +132,8 @@ uint32_t LVBANK<T>::GetHeaderSize()
 {
    return sizeof(NAME)
           + sizeof(HistoryRate)
-          + sizeof(DataEndianess)
+          + sizeof(TimestampEndianness)
+          + sizeof(DataEndianness)
           + sizeof(BlockSize)
           + sizeof(NumberOfEntries);
 }
@@ -148,7 +154,8 @@ void LVBANK<T>::ClearHeader()
    NAME.VARNAME[0]=0;
    NAME.EquipmentType[0]=0;
    HistoryRate=0;
-   DataEndianess=-1;
+   TimestampEndianness=-1;
+   DataEndianness=-1;
    BlockSize=-1;
    NumberOfEntries=-1;
 }
@@ -487,9 +494,9 @@ void HistoryVariable::Update(const LVBANK<T>* lvbank)
       return;
    const LVDATA<T>* data=lvbank->GetLastDataEntry();
    //std::cout <<data->GetUnixTimestamp() <<" <  " <<fLastUpdate + UpdateFrequency <<std::endl;
-   if (data->GetUnixTimestamp() < fLastUpdate + UpdateFrequency)
+   if (data->GetUnixTimestamp(lvbank->TimestampEndianness) < fLastUpdate + UpdateFrequency)
       return;
-   fLastUpdate=data->GetUnixTimestamp();
+   fLastUpdate=data->GetUnixTimestamp(lvbank->TimestampEndianness);
    const int data_entries=data->GetEntries(lvbank->BlockSize);
    std::vector<T> array(data_entries);
    for (int i=0; i<data_entries; i++)
@@ -743,6 +750,11 @@ void feLabVIEWClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
             break;
       }
       return;
+   }
+   //Some devices don't have their own clocks... (arduino)... so lets support them too!
+   else if (strncmp(bank->NAME.VARNAME,"GET_TIME",8)==0)
+   {
+
    }
    else if (strncmp(bank->NAME.VARNAME,"GET_EVENT_SIZE",14)==0)
    {
