@@ -104,7 +104,7 @@ template<typename T>
 void LVBANK<T>::printheader() const
 {
    NAME.print();
-   std::cout<<"  HistoryRate:"<<HistoryRate<<std::endl;
+   std::cout<<"  HistoryPeriod:"<<HistoryPeriod<<std::endl;
    std::cout<<"  TimestampEndianess"<<TimestampEndianness<<std::endl;
    std::cout<<"  DataEndianess:"<<DataEndianness<<std::endl;
    std::cout<<"  BlockSize:"<<BlockSize<<std::endl;
@@ -131,7 +131,8 @@ template<typename T>
 uint32_t LVBANK<T>::GetHeaderSize()
 {
    return sizeof(NAME)
-          + sizeof(HistoryRate)
+          + sizeof(HistorySettings)
+          + sizeof(HistoryPeriod)
           + sizeof(TimestampEndianness)
           + sizeof(DataEndianness)
           + sizeof(BlockSize)
@@ -153,7 +154,8 @@ void LVBANK<T>::ClearHeader()
    NAME.VARCATEGORY[0]=0;
    NAME.VARNAME[0]=0;
    NAME.EquipmentType[0]=0;
-   HistoryRate=0;
+   HistorySettings=0;
+   HistoryPeriod=0;
    TimestampEndianness=-1;
    DataEndianness=-1;
    BlockSize=-1;
@@ -462,7 +464,10 @@ HistoryVariable::HistoryVariable(const LVBANK<T>* lvbank, TMFE* mfe,TMFeEquipmen
 {
    fCategory=lvbank->GetCategoryName();
    fVarName=lvbank->GetVariableName();
-   UpdateFrequency=lvbank->HistoryRate;
+   if (lvbank->HistorySettings!=65535)
+      UpdateFrequency=lvbank->HistoryPeriod;
+   else
+      UpdateFrequency=gHistoryPeriod;
    if (!UpdateFrequency)
       return;
    fLastUpdate=0;
@@ -492,6 +497,7 @@ void HistoryVariable::Update(const LVBANK<T>* lvbank)
 {
    if (!UpdateFrequency)
       return;
+   
    const LVDATA<T>* data=lvbank->GetLastDataEntry();
    //std::cout <<data->GetUnixTimestamp() <<" <  " <<fLastUpdate + UpdateFrequency <<std::endl;
    if (data->GetUnixTimestamp(lvbank->TimestampEndianness) < fLastUpdate + UpdateFrequency)
@@ -703,6 +709,9 @@ void feLabVIEWClass::HandleBeginRun()
 {
    fMfe->Msg(MINFO, "HandleBeginRun", "Begin run!");
    fMfe->fOdbRoot->RI("Runinfo/Run number", &RUNNO);
+   fMfe->fOdbRoot->RU32("Runinfo/Start Time binary", &RUN_START_T);
+   //Stop time gets reset to 0 (1/1/1970) at start run
+   //fMfe->fOdbRoot->RU32("Runinfo/Stop Time binary", &RUN_STOP_T);
    fEq->SetStatus("Running", "#00FF00");
    RunStatus=Running;
 }
@@ -711,6 +720,8 @@ void feLabVIEWClass::HandleEndRun()
 {
    fMfe->Msg(MINFO, "HandleEndRun", "End run!");
    fMfe->fOdbRoot->RI("Runinfo/Run number", &RUNNO);
+   fMfe->fOdbRoot->RU32("Runinfo/Start Time binary", &RUN_START_T);
+   fMfe->fOdbRoot->RU32("Runinfo/Stop Time binary", &RUN_STOP_T);
    fEq->SetStatus("Stopped", "#00FF00");
    RunStatus=Stopped;
 }
@@ -733,6 +744,20 @@ void feLabVIEWClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
       //Format RUNNO to string for JSON
       sprintf(buf,"%d",RUNNO);
       message.QueueData("RunNumber",buf);
+      return;
+   }
+   else if (strncmp(bank->NAME.VARNAME,"GET_RUN_START_T",15)==0)
+   {
+      char buf[20]={0};
+      sprintf(buf,"%u",RUN_START_T);
+      message.QueueData("RunStartTime",buf);
+      return;
+   }
+   else if (strncmp(bank->NAME.VARNAME,"GET_RUN_STOP_T",15)==0)
+   {
+      char buf[20]={0};
+      sprintf(buf,"%u",RUN_STOP_T);
+      message.QueueData("RunStopTime",buf);
       return;
    }
    else if (strncmp(bank->NAME.VARNAME,"GET_STATUS",10)==0)
@@ -818,6 +843,7 @@ void feLabVIEWClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
       //std::cout<<"SEND TO PORT:"<<port<<std::endl;
       std::cout<<log_to_port<<std::endl;
       message.QueueData("SendToPort",log_to_port);
+      return;
    }
    //Put every UTF-8 character into a string and send it as JSON
    else
@@ -851,7 +877,7 @@ void feLabVIEWClass::LogBank(const char* buf, const char* hostname)
    } else if (strncmp(ThisBank->NAME.DATATYPE,"I32",3)==0) {
       LVBANK<int32_t>* bank=(LVBANK<int32_t>*)buf;
       logger.Update(bank);
-   } else if (strncmp(ThisBank->NAME.DATATYPE,"UI32",4)==0) {
+   } else if (strncmp(ThisBank->NAME.DATATYPE,"U32",4)==0) {
       LVBANK<uint32_t>* bank=(LVBANK<uint32_t>*)buf;
       //bank->print();
       logger.Update(bank);
@@ -1059,7 +1085,7 @@ void feLabVIEWClass::HandlePeriodic()
       if (--max_reads == 0)
       {
          char message[100];
-         sprintf(message,"TCP Read timeout getting LVBANKARRAY");
+         sprintf(message,"TCP Read timeout getting LVBANKARRAY, got %d bytes, expected %d",position,BankSize);
          fMfe->Msg(MTALK, "feLabVIEW", message);
          return;
       } 
@@ -1103,9 +1129,13 @@ void feLabVIEWClass::HandlePeriodic()
    message.QueueData("MIDASTime",buf);
    bool KillFrontend=message.HaveErrors();
    std::string reply=message.ReadMessageQueue();
+   //std::cout<<"Sending "<<reply.size()<<" bytes"<<std::endl;
    send(new_socket, reply.c_str(), reply.size(), 0 );
-   shutdown(new_socket,SHUT_RD);
+   read( new_socket, NULL,0);
    close(new_socket);
+   
+   shutdown(new_socket,SHUT_RD);
+   
    //zmq_send (responder, reply.c_str(), reply.size(), 0);
    if (KillFrontend)
       exit(1);
@@ -1120,6 +1150,7 @@ feLabVIEWWorker::feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hos
    //Default event size ok 10kb, will be overwritten by ODB entry in Init()
    fEventSize = 10000;
    fEventBuf  = NULL;
+
    // Creating socket file descriptor 
    server_fd = socket(AF_INET, SOCK_STREAM, 0);
    fcntl(server_fd, F_SETFL, O_NONBLOCK);
@@ -1133,9 +1164,15 @@ feLabVIEWWorker::feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hos
       //perror("setsockopt"); 
       exit(1); 
    }
+
    RunStatus=Unknown;
    RUNNO=-1;
+   RUN_START_T=0;
+   RUN_STOP_T=0;
    fMfe->fOdbRoot->RI("Runinfo/Run number", &RUNNO);
+   fMfe->fOdbRoot->RU32("Runinfo/Start Time binary", &RUN_START_T);
+   fMfe->fOdbRoot->RU32("Runinfo/Stop Time binary", &RUN_STOP_T);
+
    //int period=1000;
    //fEq->fOdbEqCommon->RI("Period",&period);
    //fEq->fCommon->Period=period;
@@ -1176,6 +1213,9 @@ feLabVIEWSupervisor::feLabVIEWSupervisor(TMFE* mfe, TMFeEquipment* eq): feLabVIE
    //Default event size ok 10kb, will be overwritten by ODB entry in Init()
    fEventSize = 10000;
    fEventBuf  = NULL;
+
+
+   gHistoryPeriod = 10;
    //So far... limit to 1000 frontend workers...
    fPortRangeStart = 13000;
    fPortRangeStop  = 13999;
@@ -1202,6 +1242,7 @@ void feLabVIEWSupervisor::Init()
    fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
    fEq->fOdbEqSettings->RI("port_range_start",&fPortRangeStart, true);
    fEq->fOdbEqSettings->RI("port_range_stop",&fPortRangeStop, true);
+   fEq->fOdbEqSettings->RI("DefaultHistoryPeriod",&gHistoryPeriod,true);
    assert(fPort>0);
    fOdbWorkers=fEq->fOdbEqSettings->Chdir("WorkerList",true);
    fOdbWorkers->WS("HostName","",32);

@@ -118,7 +118,8 @@ template<typename T>
 class LVBANK {
    public:
    BANK_TITLE NAME;
-   uint32_t HistoryRate;
+   uint16_t HistorySettings;
+   uint16_t HistoryPeriod;
    uint16_t TimestampEndianness;
    uint16_t DataEndianness;
    uint32_t BlockSize;
@@ -342,6 +343,8 @@ public:
    //Periodic task query items (sould only be send from worker class... not yet limited)
    RunStatusType RunStatus;
    int RUNNO;
+   uint32_t RUN_START_T;
+   uint32_t  RUN_STOP_T;
    AllowedHosts* allowed_hosts;
    MessageHandler message;
    PeriodicityManager periodicity;
@@ -377,7 +380,7 @@ public:
 };
 
 
-
+int gHistoryPeriod;
 class feLabVIEWWorker :
    public feLabVIEWClass
 {
@@ -396,6 +399,8 @@ public:
 
    int fPortRangeStart;
    int fPortRangeStop;
+
+
 
    feLabVIEWSupervisor(TMFE* mfe, TMFeEquipment* eq);
 
