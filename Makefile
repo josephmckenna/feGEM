@@ -4,7 +4,7 @@ SRC_DIR   = $(MIDASSYS)/src
 
 CC     = gcc
 CFLAGS = -Wall -O2 -g -Wall -DOS_LINUX -Dextname
-CFLAGS += -std=c++11 -Wall -O2 -g -I. -I$(INC_DIR) -I$(MIDASSYS)/mxml/ -I$(MIDASSYS)/mvodb/
+CFLAGS += -std=c++11 -Wall -O2 -g -I. -I$(INC_DIR) -I$(MIDASSYS)/mxml/ -I$(MIDASSYS)/mvodb/ -I$(MIDASSYS)/mjson/
 CFLAGS += $(PGFLAGS)
 LIBS = -lm -lz -lutil -lnsl -lpthread
 LIB = $(LIB_DIR)/libmidas.a -lrt
