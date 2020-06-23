@@ -1,10 +1,10 @@
 //
-// feLabVIEW.cxx
+// feGEM.cxx
 //
 // Frontend for two way communication to labVIEW (and or python)
 // JTK McKENNA
 //
-#include "feLabVIEW.h"
+#include "feGEM.h"
 
 //--------------------------------------------------
 // LVDATA object
@@ -258,7 +258,7 @@ void MessageHandler::QueueError(const char* err)
    for (int i=1; i<len; i++)
       if (err[i]=='"')
          assert(err[i-1]=='\\');
-   fMfe->Msg(MTALK, "feLabVIEW", err);
+   fMfe->Msg(MTALK, "feGEM", err);
    QueueData("err",err,len);
 }
 
@@ -549,7 +549,7 @@ HistoryVariable* HistoryLogger::AddNewVariable(const LVBANK<T>* lvbank)
    //Announce in control room new variable is logging
    char message[100];
    sprintf(message,"New variable [%s] in category [%s] being logged (type %s)",lvbank->GetVariableName().c_str(),lvbank->GetCategoryName().c_str(), lvbank->GetType().c_str());
-   fMfe->Msg(MTALK, "feLabVIEW", message);
+   fMfe->Msg(MTALK, "feGEM", message);
    //Return pointer to this variable so the history can be updated by caller function
    return fVariables.back();
 }
@@ -620,7 +620,7 @@ void PeriodicityManager::AddRemoteCaller(char* prog)
       if (strcmp(prog,item.c_str())==0)
       {
          std::cout<<"Restarted program detected ("<<ProgramName(prog)<<")! Total:"<<fNumberOfConnections<<std::endl;
-         fMfe->Msg(MTALK, "feLabVIEW", "Restart of program %s detected",ProgramName(prog));
+         fMfe->Msg(MTALK, "feGEM", "Restart of program %s detected",ProgramName(prog));
          return;
       }
    }
@@ -644,11 +644,11 @@ void PeriodicityManager::LogPeriodicWithData()
       {
          //The usage of the periodic tasks is beyond spec... perhaps a user didn't initialise connect properly
          fMfe->Msg(MTALK,
-                  "feLabVIEW", "%s periodic tasks are very busy... miss use of the LabVIEW library?",
+                  "feGEM", "%s periodic tasks are very busy... miss use of the LabVIEW library?",
                   fMfe->fFrontendName.c_str()
                   );
          fMfe->Msg(MINFO,
-                  "feLabVIEW",
+                  "feGEM",
                   "Estimated connections:  %d periodics with data /  %d periodics without  > %d fNumberOfConnections",
                   fPeriodicWithData,
                   fPeriodicWithoutData,
@@ -695,18 +695,18 @@ void PeriodicityManager::ProcessMessage(LVBANK<char>* bank)
 //--------------------------------------------------
 // Base class for LabVIEW frontend
 // Child classes:
-//    feLabVIEW supervisor (recieves new connections and refers a host to a worker)
-//    feLabVIEW worker (one worker per host)
+//    feGEM supervisor (recieves new connections and refers a host to a worker)
+//    feGEM worker (one worker per host)
 //--------------------------------------------------
 
 
-std::string feLabVIEWClass::HandleRpc(const char* cmd, const char* args)
+std::string feGEMClass::HandleRpc(const char* cmd, const char* args)
 {
    fMfe->Msg(MINFO, "HandleRpc", "RPC cmd [%s], args [%s]", cmd, args);
    return "OK";
 }
 
-void feLabVIEWClass::HandleBeginRun()
+void feGEMClass::HandleBeginRun()
 {
    fMfe->Msg(MINFO, "HandleBeginRun", "Begin run!");
    fMfe->fOdbRoot->RI("Runinfo/Run number", &RUNNO);
@@ -717,7 +717,7 @@ void feLabVIEWClass::HandleBeginRun()
    RunStatus=Running;
 }
 
-void feLabVIEWClass::HandleEndRun()
+void feGEMClass::HandleEndRun()
 {
    fMfe->Msg(MINFO, "HandleEndRun", "End run!");
    fMfe->fOdbRoot->RI("Runinfo/Run number", &RUNNO);
@@ -727,13 +727,13 @@ void feLabVIEWClass::HandleEndRun()
    RunStatus=Stopped;
 }
 
-void feLabVIEWClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
+void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
 {
    //bank->print();
    if (strncmp(bank->NAME.VARNAME,"TALK",4)==0)
    {
       bank->print();
-      fMfe->Msg(MTALK, "feLabVIEW", (char*)bank->DATA->DATA);
+      fMfe->Msg(MTALK, "feGEM", (char*)bank->DATA->DATA);
       if (strncmp(bank->NAME.VARCATEGORY,"THISHOST",8)==0)
       {
          periodicity.ProcessMessage(bank);
@@ -793,12 +793,12 @@ void feLabVIEWClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
    }
    else if (strncmp(bank->NAME.VARNAME,"SET_EVENT_SIZE",14)==0)
    {
-      assert(feLabVIEWClassType==WORKER);
+      assert(feGEMClassType==WORKER);
       std::cout<<"Updating event size:"<<(char*)&bank->DATA->DATA<<std::endl;
       fEventSize=atoi((char*)&bank->DATA->DATA);
       if (fEventSize<10000)
       {
-         fMfe->Msg(MTALK, "feLabVIEW", "Minimum event size can not be less that 10 kilo bytes");
+         fMfe->Msg(MTALK, "feGEM", "Minimum event size can not be less that 10 kilo bytes");
          fEventSize=10000;
       }
       fEq->fOdbEqSettings->WI("event_size", fEventSize);
@@ -807,7 +807,7 @@ void feLabVIEWClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
    }
    else if (strncmp(bank->NAME.VARNAME,"START_FRONTEND",14)==0)
    {
-      assert(feLabVIEWClassType==SUPERVISOR);
+      assert(feGEMClassType==SUPERVISOR);
       message.QueueData("FrontendStatus",AddNewClient(bank->DATA->DATA));
       return;
    }
@@ -815,7 +815,7 @@ void feLabVIEWClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
    {
       if (strcmp(bank->DATA->DATA,hostname)!=0)
       {
-         fMfe->Msg(MTALK, "feLabVIEW", "LabVIEW host name %s does not match DNS lookup %s",bank->DATA->DATA,hostname);
+         fMfe->Msg(MTALK, "feGEM", "LabVIEW host name %s does not match DNS lookup %s",bank->DATA->DATA,hostname);
          allowed_hosts->AddHost(hostname);
       }
       allowed_hosts->AddHost(bank->DATA->DATA);
@@ -830,13 +830,13 @@ void feLabVIEWClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
    }
    else if (strncmp(bank->NAME.VARNAME,"GIVE_ME_ADDRESS",15)==0)
    {
-      assert(feLabVIEWClassType==SUPERVISOR);
+      assert(feGEMClassType==SUPERVISOR);
       message.QueueData("SendToAddress","alphamidastest8");
       return;
    }
    else if (strncmp(bank->NAME.VARNAME,"GIVE_ME_PORT",14)==0)
    {
-      assert(feLabVIEWClassType==SUPERVISOR);
+      assert(feGEMClassType==SUPERVISOR);
       std::pair<int,bool> WorkerNo=FindHostInWorkerList(bank->DATA->DATA);
       assert(WorkerNo.second=true); //Assert the frontend thread is running
       int port=AssignPortForWorker(WorkerNo.first);
@@ -856,7 +856,7 @@ void feLabVIEWClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
    logger.Update(bank);
 }
 
-void feLabVIEWClass::LogBank(const char* buf, const char* hostname)
+void feGEMClass::LogBank(const char* buf, const char* hostname)
 {
    LVBANK<void*>* ThisBank=(LVBANK<void*>*)buf;
    if (strncmp(ThisBank->NAME.DATATYPE,"DBL",3)==0) {
@@ -908,7 +908,7 @@ void feLabVIEWClass::LogBank(const char* buf, const char* hostname)
    return;
 }
 
-int feLabVIEWClass::HandleBankArray(const char * ptr,const char* hostname)
+int feGEMClass::HandleBankArray(const char * ptr,const char* hostname)
 {
    LVBANKARRAY* array=(LVBANKARRAY*)ptr;
    if (array->GetTotalSize() > (uint32_t)fEventSize)
@@ -932,7 +932,7 @@ int feLabVIEWClass::HandleBankArray(const char * ptr,const char* hostname)
    return array->NumberOfEntries;
 }
 
-int feLabVIEWClass::HandleBank(const char * ptr,const char* hostname)
+int feGEMClass::HandleBank(const char * ptr,const char* hostname)
 {
    //Use invalid data type to probe the header
    LVBANK<void*>* ThisBank=(LVBANK<void*>*)ptr;
@@ -950,7 +950,7 @@ int feLabVIEWClass::HandleBank(const char * ptr,const char* hostname)
    LogBank(ptr,hostname);
    return 1;
 }
-void feLabVIEWClass::Run()
+void feGEMClass::Run()
 {
    //std::cout<<"Run..."<<std::endl;
    while (!fMfe->fShutdownRequested)
@@ -960,7 +960,7 @@ void feLabVIEWClass::Run()
       sleep(periodicity.GetWaitPeriod()/1000.);
    }
 }
-void feLabVIEWClass::ServeHost()
+void feGEMClass::ServeHost()
 {
    //
    //if (fPort!=5555)
@@ -1001,13 +1001,13 @@ void feLabVIEWClass::ServeHost()
    if (name_status)
       return;
    bool allowed=false;
-   if (feLabVIEWClassType==WORKER)
+   if (feGEMClassType==WORKER)
    {
       //Only white listed hosts allow on worker
       allowed=allowed_hosts->IsAllowed(hostname);
       //allowed=allowed_hosts->IsWhiteListed(hostname);
    }
-   else if (feLabVIEWClassType==SUPERVISOR)
+   else if (feGEMClassType==SUPERVISOR)
    {
       //Allow grey listed hosts on supervisor
       allowed=allowed_hosts->IsAllowed(hostname);
@@ -1048,7 +1048,7 @@ void feLabVIEWClass::ServeHost()
       {
          char message[100];
          sprintf(message,"TCP Read timeout getting bank header");
-         fMfe->Msg(MTALK, "feLabVIEW", message);
+         fMfe->Msg(MTALK, "feGEM", message);
          return;
       }
       //sleep(1);
@@ -1080,7 +1080,7 @@ void feLabVIEWClass::ServeHost()
    }   //std::cout<<"BankSize:"<<BankSize<<std::endl;
    else
    {
-      cm_msg(MTALK, "feLabVIEW", "Host %s is sending malformed data... black listing...", hostname);
+      cm_msg(MTALK, "feGEM", "Host %s is sending malformed data... black listing...", hostname);
       //std::cout<<"Black listing host!"<<std::endl;
       allowed_hosts->BlackList(hostname);
       legal_message=false;
@@ -1098,7 +1098,7 @@ void feLabVIEWClass::ServeHost()
       {
          char message[100];
          sprintf(message,"TCP Read timeout getting LVBANKARRAY, got %d bytes, expected %d",position,BankSize);
-         fMfe->Msg(MTALK, "feLabVIEW", message);
+         fMfe->Msg(MTALK, "feGEM", message);
          return;
       } 
    }
@@ -1155,7 +1155,7 @@ void feLabVIEWClass::ServeHost()
 }
 
 
-feLabVIEWWorker::feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts): feLabVIEWClass(mfe,eq,hosts,WORKER)
+feGEMWorker::feGEMWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts): feGEMClass(mfe,eq,hosts,WORKER)
 {
    fMfe = mfe;
    fEq  = eq;
@@ -1189,7 +1189,7 @@ feLabVIEWWorker::feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hos
    //fEq->fOdbEqCommon->RI("Period",&period);
    //fEq->fCommon->Period=period;
 }
-void feLabVIEWWorker::Init()
+void feGEMWorker::Init()
 {
    fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
    lastEventSize=fEventSize;
@@ -1215,11 +1215,11 @@ void feLabVIEWWorker::Init()
       exit(1); 
    }
    //assert (rc==0);
-   TCP_thread=std::thread(&feLabVIEWClass::Run,this);
+   TCP_thread=std::thread(&feGEMClass::Run,this);
 }
 
 
-feLabVIEWSupervisor::feLabVIEWSupervisor(TMFE* mfe, TMFeEquipment* eq): feLabVIEWClass(mfe,eq,new AllowedHosts(mfe),SUPERVISOR) // ctor
+feGEMSupervisor::feGEMSupervisor(TMFE* mfe, TMFeEquipment* eq): feGEMClass(mfe,eq,new AllowedHosts(mfe),SUPERVISOR) // ctor
 {
    fMfe = mfe;
    fEq  = eq;
@@ -1247,7 +1247,7 @@ feLabVIEWSupervisor::feLabVIEWSupervisor(TMFE* mfe, TMFeEquipment* eq): feLabVIE
    }
    fPort=5555;
 }
-void feLabVIEWSupervisor::Init()
+void feGEMSupervisor::Init()
 {
    fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
    fEq->fOdbEqSettings->RI("port_range_start",&fPortRangeStart, true);
@@ -1277,10 +1277,10 @@ void feLabVIEWSupervisor::Init()
       exit(1); 
    }  
    //assert (rc==0);
-   TCP_thread=std::thread(&feLabVIEWClass::Run,this);
+   TCP_thread=std::thread(&feGEMClass::Run,this);
 }
 
-std::pair<int,bool> feLabVIEWSupervisor::FindHostInWorkerList(const char* hostname)
+std::pair<int,bool> feGEMSupervisor::FindHostInWorkerList(const char* hostname)
 {
    std::vector<std::string> hostlist;
    fOdbWorkers->RSA("HostName", &hostlist);
@@ -1299,7 +1299,7 @@ std::pair<int,bool> feLabVIEWSupervisor::FindHostInWorkerList(const char* hostna
    return {size,false};
 }
 
-int feLabVIEWSupervisor::AssignPortForWorker(uint workerID)
+int feGEMSupervisor::AssignPortForWorker(uint workerID)
 {
    std::vector<uint32_t> list;
    fOdbWorkers->RU32A("Port", &list);
@@ -1315,7 +1315,7 @@ int feLabVIEWSupervisor::AssignPortForWorker(uint workerID)
    }
 }
 
-const char* feLabVIEWSupervisor::AddNewClient(const char* hostname)
+const char* feGEMSupervisor::AddNewClient(const char* hostname)
 {
    std::cout<<"Check list of workers"<<std::endl;
    std::pair<int,bool> WorkerNo=FindHostInWorkerList(hostname);
@@ -1324,12 +1324,12 @@ const char* feLabVIEWSupervisor::AddNewClient(const char* hostname)
    if (WorkerNo.second==false)
    {
       allowed_hosts->AddHost(hostname);
-      std::string name = "feLV_";
+      std::string name = "feGEM_";
       name+=hostname;
       TMFE* mfe=fMfe;
       if (name.size()>31)
       {
-         mfe->Msg(MERROR, "feLabVIEW", "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
+         mfe->Msg(MERROR, "feGEM", "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
          exit(1);
       }
       TMFeCommon *common = new TMFeCommon();
@@ -1341,7 +1341,7 @@ const char* feLabVIEWSupervisor::AddNewClient(const char* hostname)
       worker_eq->ZeroStatistics();
       worker_eq->WriteStatistics();
       mfe->RegisterEquipment(worker_eq);
-      feLabVIEWWorker* workerfe = new feLabVIEWWorker(mfe,worker_eq,allowed_hosts);
+      feGEMWorker* workerfe = new feGEMWorker(mfe,worker_eq,allowed_hosts);
       workerfe->fPort=port;
       mfe->RegisterRpcHandler(workerfe);
       workerfe->Init();
@@ -1359,8 +1359,8 @@ const char* feLabVIEWSupervisor::AddNewClient(const char* hostname)
 
 static void usage()
 {
-   fprintf(stderr, "Usage: feLabview.exe\n");
-   fprintf(stderr, "Usage: feLabview --client hostname\n");
+   fprintf(stderr, "Usage: feGEM.exe\n");
+   fprintf(stderr, "Usage: feGEM --client hostname\n");
    
    exit(1);
 }
@@ -1421,7 +1421,7 @@ int main(int argc, char* argv[])
    TMFE* mfe = TMFE::Instance();
    if (name.size()>31)
    {
-      mfe->Msg(MERROR, "feLabVIEW", "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
+      mfe->Msg(MERROR, "feGEM", "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
    }
    TMFeError err = mfe->Connect(name.c_str(), __FILE__);
    if (err.error) {
@@ -1451,7 +1451,7 @@ int main(int argc, char* argv[])
 
    if (SupervisorMode)
    {
-      feLabVIEWSupervisor* myfe= new feLabVIEWSupervisor(mfe,eq);
+      feGEMSupervisor* myfe= new feGEMSupervisor(mfe,eq);
       myfe->fPort=port;
       mfe->RegisterRpcHandler(myfe);
       myfe->Init();
@@ -1460,7 +1460,7 @@ int main(int argc, char* argv[])
    else
    {
       //Probably broken
-      feLabVIEWWorker* myfe = new feLabVIEWWorker(mfe,eq,new AllowedHosts(mfe));
+      feGEMWorker* myfe = new feGEMWorker(mfe,eq,new AllowedHosts(mfe));
       myfe->fPort=port;
       mfe->RegisterRpcHandler(myfe);
       myfe->Init();

@@ -325,7 +325,7 @@ class PeriodicityManager
    const int GetWaitPeriod() { return fPeriod; }
 };
 
-class feLabVIEWClass :
+class feGEMClass :
    public TMFeRpcHandlerInterface,
    public TMFePeriodicHandlerInterface
 {
@@ -333,8 +333,8 @@ public:
    TMFE* fMfe;
    TMFeEquipment* fEq;
    enum RunStatusType{Unknown,Running,Stopped};
-   enum feLabVIEWClassEnum{SUPERVISOR,WORKER,INVALID};
-   const int feLabVIEWClassType;
+   enum feGEMClassEnum{SUPERVISOR,WORKER,INVALID};
+   const int feGEMClassType;
    //TCP stuff
    int server_fd;
    struct sockaddr_in address;
@@ -355,15 +355,15 @@ public:
    MessageHandler message;
    PeriodicityManager periodicity;
    HistoryLogger logger;
-   feLabVIEWClass(TMFE* mfe, TMFeEquipment* eq , AllowedHosts* hosts, int type ):
-      feLabVIEWClassType(type),
+   feGEMClass(TMFE* mfe, TMFeEquipment* eq , AllowedHosts* hosts, int type ):
+      feGEMClassType(type),
       message(mfe), 
       periodicity(mfe,eq), 
       logger(mfe,eq)
    {
       allowed_hosts=hosts;
    }
-   ~feLabVIEWClass() // dtor
+   ~feGEMClass() // dtor
    {
       TCP_thread.join();
       if (fEventBuf) {
@@ -390,18 +390,18 @@ public:
 
 
 int gHistoryPeriod;
-class feLabVIEWWorker :
-   public feLabVIEWClass
+class feGEMWorker :
+   public feGEMClass
 {
    public:
 
-   feLabVIEWWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts);
+   feGEMWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts);
    void Init();
 
 };
 
-class feLabVIEWSupervisor :
-   public feLabVIEWClass
+class feGEMSupervisor :
+   public feGEMClass
 {
 public:
    MVOdb* fOdbWorkers;
@@ -409,7 +409,7 @@ public:
    int fPortRangeStart;
    int fPortRangeStop;
 
-   feLabVIEWSupervisor(TMFE* mfe, TMFeEquipment* eq);
+   feGEMSupervisor(TMFE* mfe, TMFeEquipment* eq);
 
    void Init();
 
