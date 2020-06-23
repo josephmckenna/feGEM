@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <math.h> 
 #include <vector>
+#include <thread>
 #include <stdlib.h>   
 #include <cstring>
 #include <deque>
@@ -109,6 +110,7 @@ class BANK_TITLE {
    char EquipmentType[32]={0};
    void print() const;
    std::string SanitiseBankString(const char* input, int assert_size=0) const;
+   std::string GetType() const          { return SanitiseBankString(DATATYPE,4);                          }
    std::string GetCategoryName() const  { return SanitiseBankString(VARCATEGORY,sizeof(VARCATEGORY));     }
    std::string GetVariableName() const  { return SanitiseBankString(VARNAME,sizeof(VARNAME));             }
    std::string GetEquipmentType() const { return SanitiseBankString(EquipmentType,sizeof(EquipmentType)); }
@@ -128,6 +130,7 @@ class LVBANK {
 
    void printheader() const;
    void print() const;
+   std::string GetType() const          { return NAME.GetType();          }
    std::string GetCategoryName() const  { return NAME.GetCategoryName();  }
    std::string GetVariableName() const  { return NAME.GetVariableName();  }
    std::string GetEquipmentType() const { return NAME.GetEquipmentType(); }
@@ -303,6 +306,7 @@ public:
 class PeriodicityManager
 {
    private:
+   int fPeriod;
    int fNumberOfConnections;
    std::vector<std::string> RemoteCallers;
    TMFeEquipment* fEq;
@@ -318,6 +322,7 @@ class PeriodicityManager
    void LogPeriodicWithoutData();
    void UpdatePerodicity();
    void ProcessMessage(LVBANK<char>* bank);
+   const int GetWaitPeriod() { return fPeriod; }
 };
 
 class feLabVIEWClass :
@@ -335,7 +340,8 @@ public:
    struct sockaddr_in address;
    int addrlen = sizeof(address);
    int fPort;
-
+   std::thread TCP_thread;
+   
    int fEventSize;
    int lastEventSize; //Used to monitor any changes to fEventSize
    char* fEventBuf;
@@ -359,6 +365,7 @@ public:
    }
    ~feLabVIEWClass() // dtor
    {
+      TCP_thread.join();
       if (fEventBuf) {
          free(fEventBuf);
          fEventBuf = NULL;
@@ -376,7 +383,9 @@ public:
    int HandleBankArray(const char * ptr,const char* hostname);
    int HandleBank(const char * ptr,const char* hostname);
 
-   void HandlePeriodic();
+   void HandlePeriodic() {};
+   void ServeHost();
+   void Run();
 };
 
 
@@ -399,8 +408,6 @@ public:
 
    int fPortRangeStart;
    int fPortRangeStop;
-
-
 
    feLabVIEWSupervisor(TMFE* mfe, TMFeEquipment* eq);
 

@@ -548,7 +548,7 @@ HistoryVariable* HistoryLogger::AddNewVariable(const LVBANK<T>* lvbank)
    fVariables.push_back(new HistoryVariable(lvbank,fMfe,fEq));
    //Announce in control room new variable is logging
    char message[100];
-   sprintf(message,"New variable [%s] in category [%s] being logged",lvbank->GetVariableName().c_str(),lvbank->GetCategoryName().c_str());
+   sprintf(message,"New variable [%s] in category [%s] being logged (type %s)",lvbank->GetVariableName().c_str(),lvbank->GetCategoryName().c_str(), lvbank->GetType().c_str());
    fMfe->Msg(MTALK, "feLabVIEW", message);
    //Return pointer to this variable so the history can be updated by caller function
    return fVariables.back();
@@ -592,6 +592,7 @@ void HistoryLogger::Update(const LVBANK<T>* lvbank)
 
 PeriodicityManager::PeriodicityManager(TMFE* mfe,TMFeEquipment* eq)
 {
+   fPeriod=1000;
    fEq=eq;
    fMfe=mfe;
    fNumberOfConnections=1;
@@ -667,11 +668,11 @@ void PeriodicityManager::LogPeriodicWithoutData()
 
 void PeriodicityManager::UpdatePerodicity()
 {
-   std::cout<<fEq->fCommon->Period <<" > "<< 1000./ (double)fNumberOfConnections<<std::endl;
-   if (fEq->fCommon->Period > 1000./ (double)fNumberOfConnections)
+   std::cout<<fPeriod <<" > "<< 1000./ (double)fNumberOfConnections<<std::endl;
+   if (fPeriod > 1000./ (double)fNumberOfConnections)
    {
-      fEq->fCommon->Period = 1000./ (double)fNumberOfConnections;
-      std::cout<<"Periodicity increase to "<<fEq->fCommon->Period<<"ms"<<std::endl;
+      fPeriod = 1000./ (double)fNumberOfConnections;
+      std::cout<<"Periodicity increase to "<<fPeriod<<"ms"<<std::endl;
    }
    fPeriodicWithData=0;
    fPeriodicWithoutData=0;
@@ -728,6 +729,7 @@ void feLabVIEWClass::HandleEndRun()
 
 void feLabVIEWClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
 {
+   //bank->print();
    if (strncmp(bank->NAME.VARNAME,"TALK",4)==0)
    {
       bank->print();
@@ -753,7 +755,7 @@ void feLabVIEWClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
       message.QueueData("RunStartTime",buf);
       return;
    }
-   else if (strncmp(bank->NAME.VARNAME,"GET_RUN_STOP_T",15)==0)
+   else if (strncmp(bank->NAME.VARNAME,"GET_RUN_STOP_T",14)==0)
    {
       char buf[20]={0};
       sprintf(buf,"%u",RUN_STOP_T);
@@ -948,7 +950,17 @@ int feLabVIEWClass::HandleBank(const char * ptr,const char* hostname)
    LogBank(ptr,hostname);
    return 1;
 }
-void feLabVIEWClass::HandlePeriodic()
+void feLabVIEWClass::Run()
+{
+   //std::cout<<"Run..."<<std::endl;
+   while (!fMfe->fShutdownRequested)
+   {
+      ServeHost();
+      //std::cout<<"Sleeping: "<<periodicity.GetWaitPeriod()<<"ms"<<std::endl;
+      sleep(periodicity.GetWaitPeriod()/1000.);
+   }
+}
+void feLabVIEWClass::ServeHost()
 {
    //
    //if (fPort!=5555)
@@ -1203,6 +1215,7 @@ void feLabVIEWWorker::Init()
       exit(1); 
    }
    //assert (rc==0);
+   TCP_thread=std::thread(&feLabVIEWClass::Run,this);
 }
 
 
@@ -1233,9 +1246,6 @@ feLabVIEWSupervisor::feLabVIEWSupervisor(TMFE* mfe, TMFeEquipment* eq): feLabVIE
       exit(1); 
    }
    fPort=5555;
-   int period=10;
-   fEq->fOdbEqCommon->WI("Period",period);
-   fEq->fCommon->Period=period;
 }
 void feLabVIEWSupervisor::Init()
 {
@@ -1267,6 +1277,7 @@ void feLabVIEWSupervisor::Init()
       exit(1); 
    }  
    //assert (rc==0);
+   TCP_thread=std::thread(&feLabVIEWClass::Run,this);
 }
 
 std::pair<int,bool> feLabVIEWSupervisor::FindHostInWorkerList(const char* hostname)
@@ -1337,7 +1348,8 @@ const char* feLabVIEWSupervisor::AddNewClient(const char* hostname)
       mfe->RegisterPeriodicHandler(worker_eq, workerfe);
       //mfe->StartRpcThread();
       //mfe->StartPeriodicThread();
-      mfe->StartPeriodicThreads();
+      //mfe->StartPeriodicThreads();
+      
       worker_eq->SetStatus("Started", "white");
       return "New Frontend started";
    }
