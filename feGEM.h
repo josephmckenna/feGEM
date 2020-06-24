@@ -67,7 +67,7 @@ class LVTimestamp {
 
 //Data as transmitted
 template<typename T>
-class LVDATA {
+class GEMDATA {
    public:
    //LabVIEW formatted time... (128bit)
    LVTimestamp timestamp;
@@ -126,7 +126,7 @@ class LVBANK {
    uint16_t DataEndianness;
    uint32_t BlockSize;
    uint32_t NumberOfEntries;
-   LVDATA<T> DATA[];
+   GEMDATA<T> DATA[];
 
    void printheader() const;
    void print() const;
@@ -137,9 +137,9 @@ class LVBANK {
    uint32_t GetHeaderSize();
    uint32_t GetTotalSize(); //Size including header
    void ClearHeader();
-   const LVDATA<T>* GetFirstDataEntry() const;
+   const GEMDATA<T>* GetFirstDataEntry() const;
    const int64_t GetFirstUnixTimestamp() const { return GetFirstDataEntry()->GetUnixTimestamp(TimestampEndianness); }
-   const LVDATA<T>* GetLastDataEntry() const;
+   const GEMDATA<T>* GetLastDataEntry() const;
    const int64_t GetLastUnixTimestamp() const  { return GetLastDataEntry()->GetUnixTimestamp(TimestampEndianness);  }
 };
 
@@ -170,13 +170,13 @@ class MessageHandler
 {
    private:
       TMFE* fMfe;
-      std::vector<std::string> MessageForLabVIEWQueue;
-      std::vector<std::string> ErrorForLabVIEWQueue;
+      std::vector<std::string> JSONMessageQueue;
+      std::vector<std::string> JSONErrorQueue;
       int TotalText;
    public:
    MessageHandler(TMFE* mfe);
    ~MessageHandler();
-   bool HaveErrors() {return ErrorForLabVIEWQueue.size();};
+   bool HaveErrors() {return JSONErrorQueue.size();};
    void QueueData(const char* name, const char* msg, int length=-1);
    void QueueMessage(const char* msg);
    void QueueError(const char* err);

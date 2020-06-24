@@ -7,14 +7,14 @@
 #include "feGEM.h"
 
 //--------------------------------------------------
-// LVDATA object
+// GEMDATA object
 // A class to contain the raw data we want to log
 // Contents: I have a timestamp and an array
 //--------------------------------------------------
 
 
 template<typename T>
-void LVDATA<T>::print(uint32_t size, uint16_t TimestampEndianness, uint16_t DataEndianness, bool IsString) 
+void GEMDATA<T>::print(uint32_t size, uint16_t TimestampEndianness, uint16_t DataEndianness, bool IsString) 
 {
    std::cout<<"   Coarse Time:"<<GetLabVIEWCoarseTime(TimestampEndianness)<<std::endl;
    std::cout<<"   Unix Time:"<<GetUnixTimestamp(TimestampEndianness)<<std::endl;;
@@ -92,11 +92,11 @@ std::string BANK_TITLE::SanitiseBankString(const char* input, int assert_size) c
 
 //--------------------------------------------------
 // LVBANK object
-// A class to contain a bundle of LVDATA objects
+// A class to contain a bundle of GEMDATA objects
 // Contents:
 //    Variable, Category and Equipment names
 //    The rate to log to history
-//    The endianess of the LVDATA data
+//    The endianess of the GEMDATA data
 //    Size
 //--------------------------------------------------
 
@@ -121,7 +121,7 @@ void LVBANK<T>::print() const
    for (int i=0; i<NumberOfEntries; i++)
    {
       char* buf=(char*)&DATA;
-      LVDATA<T>* data=(LVDATA<T>*)buf;
+      GEMDATA<T>* data=(GEMDATA<T>*)buf;
       data->print(BlockSize, TimestampEndianness,DataEndianness,IsString);
       buf+=BlockSize;
    }
@@ -163,17 +163,17 @@ void LVBANK<T>::ClearHeader()
 }
 
 template<typename T>
-const LVDATA<T>* LVBANK<T>::GetFirstDataEntry() const
+const GEMDATA<T>* LVBANK<T>::GetFirstDataEntry() const
 {
    return &DATA[0];
 }
 
 template<typename T>
-const LVDATA<T>* LVBANK<T>::GetLastDataEntry() const
+const GEMDATA<T>* LVBANK<T>::GetLastDataEntry() const
 {
    char* ptr=(char*)&DATA;
    ptr+=BlockSize*(NumberOfEntries-1);
-   return (LVDATA<T>*)ptr;
+   return (GEMDATA<T>*)ptr;
 }
 
 //--------------------------------------------------
@@ -218,16 +218,16 @@ MessageHandler::MessageHandler(TMFE* mfe)
 
 MessageHandler::~MessageHandler()
 {
-   if (MessageForLabVIEWQueue.size())
+   if (JSONMessageQueue.size())
    {
       std::cout<<"WARNING: Messages not flushed:"<<std::endl;
-      for (auto msg: MessageForLabVIEWQueue)
+      for (auto msg: JSONMessageQueue)
          std::cout<< msg<<std::endl;
    }
-   if (ErrorForLabVIEWQueue.size())
+   if (JSONErrorQueue.size())
    {
       std::cout<<"ERROR: Errors not flushed:"<<std::endl;
-      for (auto err: ErrorForLabVIEWQueue)
+      for (auto err: JSONErrorQueue)
          std::cout<<err<<std::endl;
    }  
 }
@@ -237,7 +237,7 @@ void MessageHandler::QueueData(const char* name,const char* data, int length)
    if (length<0)
       length=strlen(data);
    std::string message=std::string("\"")+std::string(name)+std::string(":")+data+std::string("\"");
-   MessageForLabVIEWQueue.push_back(message);
+   JSONMessageQueue.push_back(message);
    TotalText+=message.size();
 }
 
@@ -266,23 +266,23 @@ std::string MessageHandler::ReadMessageQueue()
 {
    //Build basic JSON string ["msg:This is a message to LabVIEW","err:This Is An Error Message"]
    std::string msg;
-   msg.reserve(TotalText+MessageForLabVIEWQueue.size()+ErrorForLabVIEWQueue.size()+1);
+   msg.reserve(TotalText+JSONMessageQueue.size()+JSONErrorQueue.size()+1);
    msg+="[";
    int i=0;
-   for (auto Message: MessageForLabVIEWQueue)
+   for (auto Message: JSONMessageQueue)
    {
       if (i++>0)
          msg+=",";
       msg+=Message;
    }
-   MessageForLabVIEWQueue.clear();
-   for (auto Error: ErrorForLabVIEWQueue)
+   JSONMessageQueue.clear();
+   for (auto Error: JSONErrorQueue)
    {
       if (i++>0)
          msg+=",";
       msg+=Error;
    }
-   ErrorForLabVIEWQueue.clear();
+   JSONErrorQueue.clear();
    msg+="]";
    return msg;
 }
@@ -460,12 +460,12 @@ bool AllowedHosts::IsGreyListed(const char* hostname)
 // Monitor the last time we updated the ODB (only update at the periodicity specificed in LVBANK)
 //--------------------------------------------------
 template<typename T>
-HistoryVariable::HistoryVariable(const LVBANK<T>* lvbank, TMFE* mfe,TMFeEquipment* eq )
+HistoryVariable::HistoryVariable(const LVBANK<T>* GEM_bank, TMFE* mfe,TMFeEquipment* eq )
 {
-   fCategory=lvbank->GetCategoryName();
-   fVarName=lvbank->GetVariableName();
-   if (lvbank->HistorySettings!=65535)
-      UpdateFrequency=lvbank->HistoryPeriod;
+   fCategory=GEM_bank->GetCategoryName();
+   fVarName=GEM_bank->GetVariableName();
+   if (GEM_bank->HistorySettings!=65535)
+      UpdateFrequency=GEM_bank->HistoryPeriod;
    else
       UpdateFrequency=gHistoryPeriod;
    if (!UpdateFrequency)
@@ -473,7 +473,7 @@ HistoryVariable::HistoryVariable(const LVBANK<T>* lvbank, TMFE* mfe,TMFeEquipmen
    fLastUpdate=0;
    //Prepare ODB entry for variable
    MVOdb* OdbEq = NULL;
-   if (strncmp(lvbank->GetCategoryName().c_str(),"THISHOST",8)==0)
+   if (strncmp(GEM_bank->GetCategoryName().c_str(),"THISHOST",8)==0)
    {
       OdbEq = mfe->fOdbRoot->Chdir((std::string("Equipment/") + eq->fName).c_str(), true);
    }
@@ -484,26 +484,26 @@ HistoryVariable::HistoryVariable(const LVBANK<T>* lvbank, TMFE* mfe,TMFeEquipmen
    fOdbEqVariables  = OdbEq->Chdir("Variables", true);
 }
 template<typename T>
-bool HistoryVariable::IsMatch(const LVBANK<T>* lvbank)
+bool HistoryVariable::IsMatch(const LVBANK<T>* GEM_bank)
 {
-   if (strcmp(fCategory.c_str(),lvbank->GetCategoryName().c_str())!=0)
+   if (strcmp(fCategory.c_str(),GEM_bank->GetCategoryName().c_str())!=0)
       return false;
-   if (strcmp(fVarName.c_str(),lvbank->GetVariableName().c_str())!=0)
+   if (strcmp(fVarName.c_str(),GEM_bank->GetVariableName().c_str())!=0)
       return false;
    return true;
 }
 template<typename T>
-void HistoryVariable::Update(const LVBANK<T>* lvbank)
+void HistoryVariable::Update(const LVBANK<T>* GEM_bank)
 {
    if (!UpdateFrequency)
       return;
    
-   const LVDATA<T>* data=lvbank->GetLastDataEntry();
+   const GEMDATA<T>* data=GEM_bank->GetLastDataEntry();
    //std::cout <<data->GetUnixTimestamp() <<" <  " <<fLastUpdate + UpdateFrequency <<std::endl;
-   if (data->GetUnixTimestamp(lvbank->TimestampEndianness) < fLastUpdate + UpdateFrequency)
+   if (data->GetUnixTimestamp(GEM_bank->TimestampEndianness) < fLastUpdate + UpdateFrequency)
       return;
-   fLastUpdate=data->GetUnixTimestamp(lvbank->TimestampEndianness);
-   const int data_entries=data->GetEntries(lvbank->BlockSize);
+   fLastUpdate=data->GetUnixTimestamp(GEM_bank->TimestampEndianness);
+   const int data_entries=data->GetEntries(GEM_bank->BlockSize);
    std::vector<T> array(data_entries);
    for (int i=0; i<data_entries; i++)
       array[i]=data->DATA[i];
@@ -530,38 +530,38 @@ HistoryLogger::~HistoryLogger()
 }
 
 template<typename T>
-HistoryVariable* HistoryLogger::AddNewVariable(const LVBANK<T>* lvbank)
+HistoryVariable* HistoryLogger::AddNewVariable(const LVBANK<T>* GEM_bank)
 {
    //Assert that category and var name are null terminated
-   //assert(lvbank->NAME.VARCATEGORY[15]==0);
-   //assert(lvbank->NAME.VARNAME[15]==0);
+   //assert(GEM_bank->NAME.VARCATEGORY[15]==0);
+   //assert(GEM_bank->NAME.VARNAME[15]==0);
    
    //Store list of logged variables in Equipment settings
    char VarAndCategory[32];
    sprintf(VarAndCategory,"%s/%s",
-                    lvbank->GetCategoryName().c_str(),
-                    lvbank->GetVariableName().c_str());
+                    GEM_bank->GetCategoryName().c_str(),
+                    GEM_bank->GetVariableName().c_str());
    fEq->fOdbEqSettings->WSAI("feVariables",fVariables.size(), VarAndCategory);
-   fEq->fOdbEqSettings->WU32AI("DateAdded",(int)fVariables.size(), lvbank->GetFirstUnixTimestamp());
+   fEq->fOdbEqSettings->WU32AI("DateAdded",(int)fVariables.size(), GEM_bank->GetFirstUnixTimestamp());
    
    //Push into list of monitored variables
-   fVariables.push_back(new HistoryVariable(lvbank,fMfe,fEq));
+   fVariables.push_back(new HistoryVariable(GEM_bank,fMfe,fEq));
    //Announce in control room new variable is logging
    char message[100];
-   sprintf(message,"New variable [%s] in category [%s] being logged (type %s)",lvbank->GetVariableName().c_str(),lvbank->GetCategoryName().c_str(), lvbank->GetType().c_str());
+   sprintf(message,"New variable [%s] in category [%s] being logged (type %s)",GEM_bank->GetVariableName().c_str(),GEM_bank->GetCategoryName().c_str(), GEM_bank->GetType().c_str());
    fMfe->Msg(MTALK, "feGEM", message);
    //Return pointer to this variable so the history can be updated by caller function
    return fVariables.back();
 }
 
 template<typename T>
-HistoryVariable* HistoryLogger::Find(const LVBANK<T>* lvbank, bool AddIfNotFound=true)
+HistoryVariable* HistoryLogger::Find(const LVBANK<T>* GEM_bank, bool AddIfNotFound=true)
 {
    HistoryVariable* FindThis=NULL;
    //Find HistoryVariable that matches 
    for (auto var: fVariables)
    {
-      if (var->IsMatch(lvbank))
+      if (var->IsMatch(GEM_bank))
       {
          FindThis=var;
          break;
@@ -570,16 +570,16 @@ HistoryVariable* HistoryLogger::Find(const LVBANK<T>* lvbank, bool AddIfNotFound
    //If no match found... create one
    if (!FindThis && AddIfNotFound)
    {
-      FindThis=AddNewVariable(lvbank);
+      FindThis=AddNewVariable(GEM_bank);
    }
    return FindThis;
 }
 
 template<typename T>
-void HistoryLogger::Update(const LVBANK<T>* lvbank)
+void HistoryLogger::Update(const LVBANK<T>* GEM_bank)
 {
-   HistoryVariable* UpdateThis=Find(lvbank,true);
-   UpdateThis->Update(lvbank);
+   HistoryVariable* UpdateThis=Find(GEM_bank,true);
+   UpdateThis->Update(GEM_bank);
 }
 
 //--------------------------------------------------
@@ -1026,9 +1026,9 @@ void feGEMClass::ServeHost()
    fEq->ComposeEvent(fEventBuf, fEventSize);
    fEq->BkInit(fEventBuf, fEventSize);
    // We place the data inside the data bank (aimed minimise move/copy operations for speed)
-   // therefor we must define the MIDAS Bankname now, not after we know if its a LabVIEW
-   // bank or LabVIEW Array LVB1 or LVA1
-   char* ptr = (char*) fEq->BkOpen(fEventBuf, "LVD1", TID_STRUCT);
+   // therefor we must define the MIDAS Bankname now, not after we know if its a Generic 
+   // Equipment Manager bank or Generic Equipment Manager Array GEB1 or GEA1
+   char* ptr = (char*) fEq->BkOpen(fEventBuf, "GEM1", TID_STRUCT);
    int read_status=0;
    int position=0;
    int BankSize=-1;
@@ -1068,12 +1068,12 @@ void feGEMClass::ServeHost()
    max_reads=10000;
    
    //We have the header... check for compliant data type and get the total size (BankSize)
-   if (strncmp(ptr,"PYA1",4)==0 || strncmp(ptr,"LVA1",4)==0)
+   if (strncmp(ptr,"GEA1",4)==0 )
    {
       LVBANKARRAY* bank=(LVBANKARRAY*)ptr;
       BankSize=bank->GetTotalSize();
    }
-   else if (strncmp(ptr,"PYB1",4)==0 || strncmp(ptr,"LVB1",4)==0)
+   else if (strncmp(ptr,"GEB1",4)==0 )
    {
       LVBANK<void*>* bank=(LVBANK<void*>*)ptr;
       BankSize=bank->GetTotalSize();
@@ -1110,10 +1110,10 @@ void feGEMClass::ServeHost()
    int nbanks=0;
    //Process what we have read into the MIDAS bank
    //printf ("[%s] Received %c%c%c%c (%d bytes)",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],read_status);
-   if (strncmp(ptr,"PYA1",4)==0 || strncmp(ptr,"LVA1",4)==0) {
+   if (strncmp(ptr,"GEA1",4)==0 ) {
       //std::cout<<"["<<fEq->fName.c_str()<<"] Python / LabVIEW Bank Array found!"<<std::endl;
       nbanks=HandleBankArray(ptr,hostname); //Iterates over array with HandleBank()
-   } else if (strncmp(ptr,"PYB1",4)==0 || strncmp(ptr,"LVB1",4)==0 ) {
+   } else if (strncmp(ptr,"GEB1",4)==0 ) {
       //std::cout<<"["<<fEq->fName.c_str()<<"] Python / LabVIEW Bank found!"<<std::endl;
       nbanks=HandleBank(ptr,hostname);
    } else {
@@ -1245,7 +1245,7 @@ feGEMSupervisor::feGEMSupervisor(TMFE* mfe, TMFeEquipment* eq): feGEMClass(mfe,e
       //perror("setsockopt"); 
       exit(1); 
    }
-   fPort=5555;
+   fPort=12345;
 }
 void feGEMSupervisor::Init()
 {
@@ -1381,8 +1381,10 @@ int main(int argc, char* argv[])
 
    bool SupervisorMode=true;
    std::string client="NULL";
-   int port          =5555;
+   int port          =12345;
    int max_event_size=0;
+   
+   
    // loop over the commandline options
    for (unsigned int i=1; i<args.size(); i++) 
    {
@@ -1410,11 +1412,11 @@ int main(int argc, char* argv[])
    if (SupervisorMode)
    {
       std::cout<<"Starting in supervisor mode"<<std::endl;
-      name+="LabVIEW";
+      name+="GEM";
    }
    else
    {
-      name+="LV_";
+      name+="GEM_";
       name+=client.c_str();
    }
 
