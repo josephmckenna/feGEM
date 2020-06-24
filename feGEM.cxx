@@ -1294,7 +1294,7 @@ std::pair<int,bool> feGEMSupervisor::FindHostInWorkerList(const char* hostname)
          return {i,true};
       }
    }
-   fOdbWorkers->WSAI("HostName",size,hostname);
+   fOdbWorkers->WSAI("HostName",size-1,hostname);
    std::cout<<"No Match... return size:"<<size<<std::endl;
    return {size,false};
 }
@@ -1306,7 +1306,7 @@ int feGEMSupervisor::AssignPortForWorker(uint workerID)
    if (workerID>=list.size())
    {
       int port=fPort+workerID+1;
-      fOdbWorkers->WU32AI("Port",workerID,port);
+      fOdbWorkers->WU32AI("Port",workerID-1,port);
       return port;
    }
    else
@@ -1360,7 +1360,6 @@ const char* feGEMSupervisor::AddNewClient(const char* hostname)
 static void usage()
 {
    fprintf(stderr, "Usage: feGEM.exe\n");
-   fprintf(stderr, "Usage: feGEM --client hostname\n");
    
    exit(1);
 }
@@ -1383,8 +1382,7 @@ int main(int argc, char* argv[])
    std::string client="NULL";
    int port          =12345;
    int max_event_size=0;
-   
-   
+
    // loop over the commandline options
    for (unsigned int i=1; i<args.size(); i++) 
    {
@@ -1440,11 +1438,13 @@ int main(int argc, char* argv[])
    
    TMFeEquipment* eq = new TMFeEquipment(mfe, name.c_str(), common);
 
+   
+
    eq->Init();
    //If not default setting, update ODB
    if (max_event_size!=0)
       eq->fOdbEqSettings->WI("event_size", max_event_size);
-
+   eq->fOdbEqSettings->RI("supervisor_port", &port, true);
    eq->SetStatus("Starting...", "white");
    eq->ZeroStatistics();
    eq->WriteStatistics();
