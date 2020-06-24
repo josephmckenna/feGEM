@@ -322,13 +322,21 @@ AllowedHosts::AllowedHosts(TMFE* mfe): cool_down_time(1000), retry_limit(10)
    //Set cooldown time to 10 seconds
    //Set retry limit to 10
    fOdbEqSettings=mfe->fOdbRoot->Chdir((std::string("Equipment/") + mfe->fFrontendName + std::string("/Settings")).c_str() );
+   allow_self_registration=false;
+   fOdbEqSettings->RB("allow_self_registration",&allow_self_registration,true);
    std::vector<std::string> list;
-   
-   fOdbEqSettings->RSA("allowed_hosts", &list,true);
+   list.push_back("local_host");
+   //TEST!
+   list.push_back("lxplus?6.cern.ch");
+   list.push_back("lxplus*6.cern.ch");
+   fOdbEqSettings->RSA("allowed_hosts", &list,true,10);
+   //Copy list of good hostnames into array of Host objects
    for (auto host: list)
       allowed_hosts.push_back(Host(host.c_str()));
-   
-   fOdbEqSettings->RSA("banned_hosts", &list,true);
+   list.clear();
+   list.push_back("bad_host_name");
+   fOdbEqSettings->RSA("banned_hosts", &list,true,10);
+   //Copy bad of good hostnames into array of Host objects
    for (auto host: list)
       banned_hosts.push_back(Host(host.c_str()));
 }
@@ -351,9 +359,13 @@ void AllowedHosts::PrintRejection(TMFE* mfe,const char* hostname)
 
 bool AllowedHosts::IsAllowed(const char* hostname)
 {
+   std::cout<<"Testing:"<<hostname<<std::endl;
    if (IsListedAsAllowed(hostname))
       return true;
    if (IsListedAsBanned(hostname))
+      return false;
+   //Questionable list only permitted if allowing self registration
+   if (!allow_self_registration)
       return false;
    if (IsListedAsQuestionable(hostname))
       return true; 
@@ -383,7 +395,8 @@ bool AllowedHosts::AddHost(const char* hostname)
       std::lock_guard<std::mutex> lock(list_lock);
       allowed_hosts.push_back(Host(hostname));
       }
-      fOdbEqSettings->WSAI("allowed_hosts",(int)allowed_hosts.size(), hostname);
+      std::cout<<"Updating ODB with:"<< hostname<<" at "<<(int)allowed_hosts.size()-1<<std::endl;
+      fOdbEqSettings->WSAI("allowed_hosts",(int)allowed_hosts.size()-1, hostname);
       //True for new item added
       return true;
    }
@@ -429,7 +442,7 @@ bool AllowedHosts::IsListedAsQuestionable(const char* hostname)
          std::cout<<"Rejection count:"<<host.RejectionCount<<std::endl;
          if (host.RejectionCount>retry_limit)
          {
-            std::cout<<"Black listing "<<hostname<<std::endl;
+            std::cout<<"Banning host "<<hostname<<std::endl;
             banned_hosts.push_back(host);
             questionable_hosts.remove(host);
          }
@@ -813,6 +826,11 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
    }
    else if (strncmp(bank->NAME.VARNAME,"ALLOW_HOST",14)==0)
    {
+      if (!allowed_hosts->SelfRegistrationIsAllowed())
+      {
+         fMfe->Msg(MTALK, "feGEM", "LabVIEW host name %s tried to register its self on allowed host list, but self registration is disabled",hostname);
+         return;
+      }
       if (strcmp(bank->DATA->DATA,hostname)!=0)
       {
          fMfe->Msg(MTALK, "feGEM", "LabVIEW host name %s does not match DNS lookup %s",bank->DATA->DATA,hostname);
@@ -823,6 +841,11 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
    }
    else if (strncmp(bank->NAME.VARNAME,"ALLOW_SSH_TUNNEL",14)==0)
    {
+      if (!allowed_hosts->SelfRegistrationIsAllowed())
+      {
+         fMfe->Msg(MTALK, "feGEM", "LabVIEW host name %s tried to register its self on allowed host list, but self registration is disabled",hostname);
+         return;
+      }
       // We do not know the name of the host yet... they will reconnect on a new port...
       // and, for example, lxplus might have a new alias)
       allowed_hosts->AddHost(hostname);
@@ -1323,7 +1346,7 @@ const char* feGEMSupervisor::AddNewClient(const char* hostname)
    std::cout<<"Assign port "<<port<< " for worker "<<WorkerNo.first<<std::endl;
    if (WorkerNo.second==false)
    {
-      allowed_hosts->AddHost(hostname);
+      //allowed_hosts->AddHost(hostname);
       std::string name = "feGEM_";
       name+=hostname;
       TMFE* mfe=fMfe;
@@ -1392,8 +1415,6 @@ int main(int argc, char* argv[])
       if (strncmp(arg,"--client",8)==0) {
          client = args[++i];
          SupervisorMode=false;
-      } else if (strncmp(arg,"--port",8)==0) {
-         port = atoi(args[++i].c_str());
       } else if (strncmp(arg,"--max_event_size",16)==0) {
          max_event_size= atoi(args[++i].c_str()); 
       } else {
