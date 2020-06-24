@@ -289,7 +289,7 @@ std::string MessageHandler::ReadMessageQueue()
 
 //--------------------------------------------------
 // Allowed Hosts class 
-//          Contents: White listed hosts, grey listed hosts and black listed hosts
+//          Contents: Listed allowed hosts, grey listed hosts and banned hosts
 //     |-->Host class: 
 //          Contents: Hostname, Rejection Counter and Last Contact time
 // Thread safe class to monitor host permissions
@@ -326,16 +326,16 @@ AllowedHosts::AllowedHosts(TMFE* mfe): cool_down_time(1000), retry_limit(10)
    
    fOdbEqSettings->RSA("allowed_hosts", &list,true);
    for (auto host: list)
-      white_list.push_back(Host(host.c_str()));
+      allowed_hosts.push_back(Host(host.c_str()));
    
-   fOdbEqSettings->RSA("black_listed_hosts", &list,true);
+   fOdbEqSettings->RSA("banned_hosts", &list,true);
    for (auto host: list)
-      black_list.push_back(Host(host.c_str()));
+      banned_hosts.push_back(Host(host.c_str()));
 }
 
 void AllowedHosts::PrintRejection(TMFE* mfe,const char* hostname)
 {
-   for (auto & host: black_list)
+   for (auto & host: banned_hosts)
    {
       if (host==hostname)
       {
@@ -351,22 +351,22 @@ void AllowedHosts::PrintRejection(TMFE* mfe,const char* hostname)
 
 bool AllowedHosts::IsAllowed(const char* hostname)
 {
-   if (IsWhiteListed(hostname))
+   if (IsListedAsAllowed(hostname))
       return true;
-   if (IsBlackListed(hostname))
+   if (IsListedAsBanned(hostname))
       return false;
-   if (IsGreyListed(hostname))
+   if (IsListedAsQuestionable(hostname))
       return true; 
    //I should never get this far:
    assert("LOGIC_FAILED");
    return false;
 }
 
-bool AllowedHosts::IsWhiteListed(const char* hostname)
+bool AllowedHosts::IsListedAsAllowed(const char* hostname)
 {
    //std::cout<<"Looking for host:"<<hostname<<std::endl;
    std::lock_guard<std::mutex> lock(list_lock);
-   for (auto& host: white_list)
+   for (auto& host: allowed_hosts)
    {
       //host.print();
       if (host==hostname)
@@ -377,13 +377,13 @@ bool AllowedHosts::IsWhiteListed(const char* hostname)
 //Allow this host:
 bool AllowedHosts::AddHost(const char* hostname)
 {
-   if (!IsWhiteListed(hostname))
+   if (!IsListedAsAllowed(hostname))
    {
       {
       std::lock_guard<std::mutex> lock(list_lock);
-      white_list.push_back(Host(hostname));
+      allowed_hosts.push_back(Host(hostname));
       }
-      fOdbEqSettings->WSAI("allowed_hosts",(int)white_list.size(), hostname);
+      fOdbEqSettings->WSAI("allowed_hosts",(int)allowed_hosts.size(), hostname);
       //True for new item added
       return true;
    }
@@ -391,26 +391,26 @@ bool AllowedHosts::AddHost(const char* hostname)
    return false;
 }
 //Ban this host:
-bool AllowedHosts::BlackList(const char* hostname)
+bool AllowedHosts::BanHost(const char* hostname)
 {
-   if (!IsBlackListed(hostname))
+   if (!IsListedAsBanned(hostname))
    {
       {
       std::lock_guard<std::mutex> lock(list_lock);
-      black_list.push_back(Host(hostname));
-      fOdbEqSettings->WSAI("black_listed_hosts",black_list.size() -1, hostname );
+      banned_hosts.push_back(Host(hostname));
+      fOdbEqSettings->WSAI("banned_hosts",banned_hosts.size() -1, hostname );
       }
       return true;
    }
    return false;
 }
 
-bool AllowedHosts::IsBlackListed(const char* hostname)
+bool AllowedHosts::IsListedAsBanned(const char* hostname)
 {
    const std::lock_guard<std::mutex> lock(list_lock);
-   if (!black_list.size()) return false;
-   for (auto & host: black_list)
-   //for(std::vector<Host>::iterator host = black_list.begin(); host != black_list.end(); ++host) 
+   if (!banned_hosts.size()) return false;
+   for (auto & host: banned_hosts)
+   //for(std::vector<Host>::iterator host = banned_hosts.begin(); host != banned_hosts.end(); ++host) 
    {
       if (host==hostname)
          return true;
@@ -418,10 +418,10 @@ bool AllowedHosts::IsBlackListed(const char* hostname)
    return false;
 }
 
-bool AllowedHosts::IsGreyListed(const char* hostname)
+bool AllowedHosts::IsListedAsQuestionable(const char* hostname)
 {
    const std::lock_guard<std::mutex> lock(list_lock);
-   for (auto& host: grey_list)
+   for (auto& host: questionable_hosts)
    {
       if (host==hostname)
       {
@@ -430,8 +430,8 @@ bool AllowedHosts::IsGreyListed(const char* hostname)
          if (host.RejectionCount>retry_limit)
          {
             std::cout<<"Black listing "<<hostname<<std::endl;
-            black_list.push_back(host);
-            grey_list.remove(host);
+            banned_hosts.push_back(host);
+            questionable_hosts.remove(host);
          }
          
          std::chrono::time_point<std::chrono::system_clock> time_now=std::chrono::high_resolution_clock::now();
@@ -451,7 +451,7 @@ bool AllowedHosts::IsGreyListed(const char* hostname)
       }
    }
    //This is the first time a host has tried to connect:
-   grey_list.push_back(Host(hostname));
+   questionable_hosts.push_back(Host(hostname));
    return true;
 }
 //--------------------------------------------------
@@ -1082,7 +1082,7 @@ void feGEMClass::ServeHost()
    {
       cm_msg(MTALK, "feGEM", "Host %s is sending malformed data... black listing...", hostname);
       //std::cout<<"Black listing host!"<<std::endl;
-      allowed_hosts->BlackList(hostname);
+      allowed_hosts->BanHost(hostname);
       legal_message=false;
       close(new_socket);
       return;

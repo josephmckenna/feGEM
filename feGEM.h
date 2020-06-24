@@ -203,13 +203,13 @@ class AllowedHosts
    private:
    std::mutex list_lock;
    //Allowed hosts:
-   std::vector<Host> white_list;
+   std::vector<Host> allowed_hosts;
    //Allowed hosts in testing mode (no ODB operations)
-   std::vector<Host> virtual_white_list;
+   std::vector<Host> virtual_allowed_hosts;
    //Hosts with questioned behaviour
-   std::list<Host> grey_list;
+   std::list<Host> questionable_hosts;
    //Banned hosts:
-   std::vector<Host> black_list;
+   std::vector<Host> banned_hosts;
    const int cool_down_time; //ms
    const int retry_limit;
    
@@ -219,14 +219,14 @@ class AllowedHosts
    AllowedHosts(TMFE* mfe);
    void PrintRejection(TMFE* mfe,const char* hostname);
    bool IsAllowed(const char* hostname);
-   bool IsWhiteListed(const char* hostname);
    //Allow this host:
    bool AddHost(const char* hostname);
    //Ban this host:
-   bool BlackList(const char* hostname);
+   bool BanHost(const char* hostname);
    private:
-   bool IsBlackListed(const char* hostname);
-   bool IsGreyListed(const char* hostname);
+   bool IsListedAsAllowed(const char* hostname);
+   bool IsListedAsBanned(const char* hostname);
+   bool IsListedAsQuestionable(const char* hostname);
 };
 
 #include <chrono>
