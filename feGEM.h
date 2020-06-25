@@ -179,7 +179,7 @@ class MessageHandler
    bool HaveErrors() {return JSONErrorQueue.size();};
    void QueueData(const char* name, const char* msg, int length=-1);
    void QueueMessage(const char* msg);
-   void QueueError(const char* err);
+   void QueueError(const char* source, const char* err);
    std::string ReadMessageQueue();
 };
 

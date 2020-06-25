@@ -252,14 +252,14 @@ void MessageHandler::QueueMessage(const char* msg)
    QueueData("msg",msg,len);
 }
 
-void MessageHandler::QueueError(const char* err)
+void MessageHandler::QueueError(const char* source, const char* err)
 {
    int len=strlen(err);
    //Quote marks in errors must have escape characters! (JSON requirement)
    for (int i=1; i<len; i++)
       if (err[i]=='"')
          assert(err[i-1]=='\\');
-   fMfe->Msg(MTALK, "feGEM", err);
+   fMfe->Msg(MTALK, source, err);
    QueueData("err",err,len);
 }
 
@@ -560,7 +560,7 @@ HistoryVariable* HistoryLogger::AddNewVariable(const LVBANK<T>* GEM_bank)
    //Announce in control room new variable is logging
    char message[100];
    sprintf(message,"New variable [%s] in category [%s] being logged (type %s)",GEM_bank->GetVariableName().c_str(),GEM_bank->GetCategoryName().c_str(), GEM_bank->GetType().c_str());
-   fMfe->Msg(MTALK, "feGEM", message);
+   fMfe->Msg(MTALK, fEq->fName.c_str(), message);
    //Return pointer to this variable so the history can be updated by caller function
    return fVariables.back();
 }
@@ -631,7 +631,7 @@ void PeriodicityManager::AddRemoteCaller(char* prog)
       if (strcmp(prog,item.c_str())==0)
       {
          std::cout<<"Restarted program detected ("<<ProgramName(prog)<<")! Total:"<<fNumberOfConnections<<std::endl;
-         fMfe->Msg(MTALK, "feGEM", "Restart of program %s detected",ProgramName(prog));
+         fMfe->Msg(MTALK, fEq->fName.c_str(), "Restart of program %s detected",ProgramName(prog));
          return;
       }
    }
@@ -655,11 +655,11 @@ void PeriodicityManager::LogPeriodicWithData()
       {
          //The usage of the periodic tasks is beyond spec... perhaps a user didn't initialise connect properly
          fMfe->Msg(MTALK,
-                  "feGEM", "%s periodic tasks are very busy... miss use of the LabVIEW library?",
+                  fEq->fName.c_str(), "%s periodic tasks are very busy... miss use of the LabVIEW library?",
                   fMfe->fFrontendName.c_str()
                   );
          fMfe->Msg(MINFO,
-                  "feGEM",
+                  fEq->fName.c_str(),
                   "Estimated connections:  %d periodics with data /  %d periodics without  > %d fNumberOfConnections",
                   fPeriodicWithData,
                   fPeriodicWithoutData,
@@ -744,7 +744,7 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
    if (strncmp(bank->NAME.VARNAME,"TALK",4)==0)
    {
       bank->print();
-      fMfe->Msg(MTALK, "feGEM", (char*)bank->DATA->DATA);
+      fMfe->Msg(MTALK, fEq->fName.c_str(), (char*)bank->DATA->DATA);
       if (strncmp(bank->NAME.VARCATEGORY,"THISHOST",8)==0)
       {
          periodicity.ProcessMessage(bank);
@@ -941,7 +941,7 @@ int feGEMClass::HandleBankArray(const char * ptr,const char* hostname)
                      fEq->fName.c_str(),
                      array->BlockSize + array->GetHeaderSize(),
                      fEventSize);
-      message.QueueError(error);
+      message.QueueError(fEq->fName.c_str(),error);
       return -1;
    }
    //array->print();
@@ -967,7 +967,7 @@ int feGEMClass::HandleBank(const char * ptr,const char* hostname)
                      fEq->fName.c_str(),
                      ThisBank->GetTotalSize(),
                      fEventSize);
-      message.QueueError(error);
+      message.QueueError(fEq->fName.c_str(),error);
       return -1;
    }
    LogBank(ptr,hostname);
@@ -1141,7 +1141,7 @@ void feGEMClass::ServeHost()
       nbanks=HandleBank(ptr,hostname);
    } else {
       std::cout<<"["<<fEq->fName.c_str()<<"] Unknown data type just received... "<<std::endl;
-      message.QueueError("Unknown data type just received... ");
+      message.QueueError(fEq->fName.c_str(),"Unknown data type just received... ");
       for (int i=0; i<20; i++)
          std::cout<<ptr[i];
       exit(1);
@@ -1352,7 +1352,7 @@ const char* feGEMSupervisor::AddNewClient(const char* hostname)
       TMFE* mfe=fMfe;
       if (name.size()>31)
       {
-         mfe->Msg(MERROR, "feGEM", "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
+         mfe->Msg(MERROR, name.c_str(), "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
          exit(1);
       }
       TMFeCommon *common = new TMFeCommon();
@@ -1442,7 +1442,7 @@ int main(int argc, char* argv[])
    TMFE* mfe = TMFE::Instance();
    if (name.size()>31)
    {
-      mfe->Msg(MERROR, "feGEM", "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
+      mfe->Msg(MERROR,"feGEM", "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
    }
    TMFeError err = mfe->Connect(name.c_str(), __FILE__);
    if (err.error) {
