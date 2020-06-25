@@ -104,6 +104,7 @@ template<typename T>
 void LVBANK<T>::printheader() const
 {
    NAME.print();
+   std::cout<<"  HistorySettings:"<<HistorySettings<<std::endl;
    std::cout<<"  HistoryPeriod:"<<HistoryPeriod<<std::endl;
    std::cout<<"  TimestampEndianess"<<TimestampEndianness<<std::endl;
    std::cout<<"  DataEndianess:"<<DataEndianness<<std::endl;
@@ -326,9 +327,6 @@ AllowedHosts::AllowedHosts(TMFE* mfe): cool_down_time(1000), retry_limit(10)
    fOdbEqSettings->RB("allow_self_registration",&allow_self_registration,true);
    std::vector<std::string> list;
    list.push_back("local_host");
-   //TEST!
-   list.push_back("lxplus?6.cern.ch");
-   list.push_back("lxplus*6.cern.ch");
    fOdbEqSettings->RSA("allowed_hosts", &list,true,10);
    //Copy list of good hostnames into array of Host objects
    for (auto host: list)
@@ -359,7 +357,7 @@ void AllowedHosts::PrintRejection(TMFE* mfe,const char* hostname)
 
 bool AllowedHosts::IsAllowed(const char* hostname)
 {
-   std::cout<<"Testing:"<<hostname<<std::endl;
+   //std::cout<<"Testing:"<<hostname<<std::endl;
    if (IsListedAsAllowed(hostname))
       return true;
    if (IsListedAsBanned(hostname))
@@ -828,7 +826,7 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
    {
       if (!allowed_hosts->SelfRegistrationIsAllowed())
       {
-         fMfe->Msg(MTALK, "feGEM", "LabVIEW host name %s tried to register its self on allowed host list, but self registration is disabled",hostname);
+         fMfe->Msg(MINFO, "feGEM", "LabVIEW host name %s tried to register its self on allowed host list, but self registration is disabled",hostname);
          return;
       }
       if (strcmp(bank->DATA->DATA,hostname)!=0)
@@ -843,7 +841,7 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
    {
       if (!allowed_hosts->SelfRegistrationIsAllowed())
       {
-         fMfe->Msg(MTALK, "feGEM", "LabVIEW host name %s tried to register its self on allowed host list, but self registration is disabled",hostname);
+         fMfe->Msg(MINFO, "feGEM", "LabVIEW host name %s tried to register its self on allowed host list, but self registration is disabled",hostname);
          return;
       }
       // We do not know the name of the host yet... they will reconnect on a new port...
@@ -980,7 +978,7 @@ void feGEMClass::Run()
    {
       ServeHost();
       //std::cout<<"Sleeping: "<<periodicity.GetWaitPeriod()<<"ms"<<std::endl;
-      sleep(periodicity.GetWaitPeriod()/1000.);
+      std::this_thread::sleep_for(std::chrono::milliseconds(periodicity.GetWaitPeriod()));
    }
 }
 void feGEMClass::ServeHost()
