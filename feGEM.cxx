@@ -806,7 +806,9 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
    {
       assert(feGEMClassType==WORKER);
       std::cout<<"Updating event size:"<<(char*)&bank->DATA->DATA<<std::endl;
-      fEventSize=atoi((char*)&bank->DATA->DATA);
+      int new_size=atoi((char*)&bank->DATA->DATA);
+      if (new_size>fEventSize)
+         fEventSize=new_size;
       if (fEventSize<10000)
       {
          fMfe->Msg(MTALK, "feGEM", "Minimum event size can not be less that 10 kilo bytes");
