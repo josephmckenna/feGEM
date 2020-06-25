@@ -203,7 +203,7 @@ class AllowedHosts
          //int i=0;
          //int j=0;
          size_t size=strlen(hostname);
-         for (int i=0, j=0; j<size; i++, j++)
+         for (size_t i=0, j=0; j<size; i++, j++)
          {
             //We are beyond the length of this object... comparison failed
             if (!HostName[i])
@@ -233,7 +233,7 @@ class AllowedHosts
                return false;
             }
          }
-         std::cout<<HostName.c_str()<<"=="<<hostname<<std::endl;
+         //std::cout<<HostName.c_str()<<"=="<<hostname<<std::endl;
          return true;
       }
       bool operator==(const Host & rhs) const     { return HostName==rhs.HostName;                 }
