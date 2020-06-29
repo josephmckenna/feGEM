@@ -695,8 +695,13 @@ void PeriodicityManager::ProcessMessage(LVBANK<char>* bank)
    if ((strncmp((char*)&(bank->DATA->DATA),"New labview connection from",27)==0) ||
        (strncmp((char*)&(bank->DATA->DATA),"New python connection from",26)==0))
    {
-      char ProgramName[100];
-      snprintf(ProgramName,bank->BlockSize-16,"%s",(char*)&(bank->DATA[0].DATA));
+      size_t NameLength=1023;
+      char ProgramName[NameLength+1];
+      // Protect against a segfault if program name is very long:
+      // trim at 'NameLength' from above
+      if (bank->BlockSize-16<NameLength)
+         NameLength=bank->BlockSize-16;
+      snprintf(ProgramName,NameLength,"%s",(char*)&(bank->DATA[0].DATA));
       AddRemoteCaller(ProgramName);
       UpdatePerodicity();
    }
@@ -922,7 +927,8 @@ void feGEMClass::LogBank(const char* buf, const char* hostname)
    
    } else if (strncmp(ThisBank->NAME.DATATYPE,"STR",3)==0) {
       LVBANK<char>* bank=(LVBANK<char>*)buf;
-      return HandleStrBank(bank,hostname);
+      HandleStrBank(bank,hostname);
+      return;
    } else {
       std::cout<<"Unknown bank data type... "<<std::endl;
       ThisBank->print();
