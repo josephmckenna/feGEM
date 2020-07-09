@@ -180,7 +180,7 @@ class MessageHandler
    void QueueData(const char* name, const char* msg, int length=-1);
    void QueueMessage(const char* msg);
    void QueueError(const char* source, const char* err);
-   std::string ReadMessageQueue();
+   std::string ReadMessageQueue(double midas_time);
 };
 
 #include <list>

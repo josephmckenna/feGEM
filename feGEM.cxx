@@ -263,12 +263,12 @@ void MessageHandler::QueueError(const char* source, const char* err)
    QueueData("err",err,len);
 }
 
-std::string MessageHandler::ReadMessageQueue()
+std::string MessageHandler::ReadMessageQueue(double midas_time)
 {
    //Build basic JSON string ["msg:This is a message to LabVIEW","err:This Is An Error Message"]
    std::string msg;
-   msg.reserve(TotalText+JSONMessageQueue.size()+JSONErrorQueue.size()+1);
-   msg+="[";
+   msg.reserve(TotalText+JSONMessageQueue.size()+JSONErrorQueue.size()+1+20);
+   msg+="[\"MIDASTime:"+std::to_string(midas_time)+"\",";
    int i=0;
    for (auto Message: JSONMessageQueue)
    {
@@ -327,13 +327,13 @@ AllowedHosts::AllowedHosts(TMFE* mfe): cool_down_time(1000), retry_limit(10)
    fOdbEqSettings->RB("allow_self_registration",&allow_self_registration,true);
    std::vector<std::string> list;
    list.push_back("local_host");
-   fOdbEqSettings->RSA("allowed_hosts", &list,true,10);
+   fOdbEqSettings->RSA("allowed_hosts", &list,true,64);
    //Copy list of good hostnames into array of Host objects
    for (auto host: list)
       allowed_hosts.push_back(Host(host.c_str()));
    list.clear();
    list.push_back("bad_host_name");
-   fOdbEqSettings->RSA("banned_hosts", &list,true,10);
+   fOdbEqSettings->RSA("banned_hosts", &list,true,64);
    //Copy bad of good hostnames into array of Host objects
    for (auto host: list)
       banned_hosts.push_back(Host(host.c_str()));
@@ -797,7 +797,24 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
    //Some devices don't have their own clocks... (arduino)... so lets support them too!
    else if (strncmp(bank->NAME.VARNAME,"GET_TIME",8)==0)
    {
-
+      if (strncmp(bank->NAME.VARCATEGORY,"CHECK_TIME_SYNC",15)==0)
+      {
+         using namespace std::chrono;
+         milliseconds ms = duration_cast< milliseconds >(
+            system_clock::now().time_since_epoch()
+         );
+         char buf[80];
+         sprintf(buf,"%f",(double)ms.count()/1000.+2082844800.);
+         std::cout<<"Time stamp for comparison:"<<buf<<std::endl;
+         message.QueueData("LV_TIME_NOW",buf);
+         
+         return;
+      }
+   }
+   else if (strncmp(bank->NAME.VARNAME,"TIME_DIFF",7)==0)
+   {
+      std::cout<<"TIME DIFF FOUND"<<std::endl;
+      bank->print();
    }
    else if (strncmp(bank->NAME.VARNAME,"GET_EVENT_SIZE",14)==0)
    {
@@ -844,7 +861,7 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
       allowed_hosts->AddHost(bank->DATA->DATA);
       return;
    }
-   else if (strncmp(bank->NAME.VARNAME,"ALLOW_SSH_TUNNEL",14)==0)
+   else if (strncmp(bank->NAME.VARNAME,"ALLOW_SSH_TUNNEL",15)==0) //VARNAME is only 15 char long
    {
       if (!allowed_hosts->SelfRegistrationIsAllowed())
       {
@@ -875,6 +892,12 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
       message.QueueData("SendToPort",log_to_port);
       return;
    }
+   else if (strncmp(bank->NAME.VARCATEGORY,"CLIENT_INFO",14)==0)
+   {
+      std::cout<<"Writing \""<<bank->DATA[0].DATA<<"\" into "<<bank->NAME.VARNAME<< " in equipment settings"<<std::endl;
+      fEq->fOdbEqSettings->WS(bank->NAME.VARNAME, bank->DATA[0].DATA);
+      return;
+   }
    //Put every UTF-8 character into a string and send it as JSON
    else
    {
@@ -887,6 +910,7 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
 void feGEMClass::LogBank(const char* buf, const char* hostname)
 {
    LVBANK<void*>* ThisBank=(LVBANK<void*>*)buf;
+   std::cout<<ThisBank->NAME.VARNAME<<std::endl;
    if (strncmp(ThisBank->NAME.DATATYPE,"DBL",3)==0) {
       LVBANK<double>* bank=(LVBANK<double>*)buf;
       //bank->print();
@@ -1166,10 +1190,8 @@ void feGEMClass::ServeHost()
    char buf[100];
    sprintf(buf,"DATA OK");
    message.QueueMessage(buf);
-   sprintf(buf,"%f", handlingtime  .count());
-   message.QueueData("MIDASTime",buf);
    bool KillFrontend=message.HaveErrors();
-   std::string reply=message.ReadMessageQueue();
+   std::string reply=message.ReadMessageQueue(handlingtime.count());
    //std::cout<<"Sending "<<reply.size()<<" bytes"<<std::endl;
    send(new_socket, reply.c_str(), reply.size(), 0 );
    read( new_socket, NULL,0);
@@ -1331,6 +1353,7 @@ std::pair<int,bool> feGEMSupervisor::FindHostInWorkerList(const char* hostname)
 int feGEMSupervisor::AssignPortForWorker(uint workerID)
 {
    std::vector<uint32_t> list;
+   std::cout<<"WorkerID:"<<workerID<<std::endl;
    fOdbWorkers->RU32A("Port", &list);
    if (workerID>=list.size())
    {
@@ -1359,7 +1382,13 @@ const char* feGEMSupervisor::AddNewClient(const char* hostname)
       if (name.size()>31)
       {
          mfe->Msg(MERROR, name.c_str(), "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
-         exit(1);
+         /*std::string tmp=name;
+         name="";
+         for (int i=0; i<16; i++)
+         {
+			 name+=tmp[i];
+		 }*/
+         //exit(1);
       }
       TMFeCommon *common = new TMFeCommon();
       common->EventID = 1;
