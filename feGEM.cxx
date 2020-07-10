@@ -1264,16 +1264,7 @@ void feGEMWorker::Init()
       //perror("bind failed"); 
       exit(1); 
    }
-   //Flush the buffer?!?
-   /*int new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
-   //if (new_socket>=0)
-   {
-      std::cout<<"SOCKET!:"<<new_socket<<std::endl;
-      while (!read( new_socket,NULL,1))
-      {
-	    std::cout<<"Flushing tcp"<<std::endl;
-	   }
-   }*/
+
    //assert (rc==0);
    TCP_thread=std::thread(&feGEMClass::Run,this);
 }
