@@ -327,13 +327,13 @@ AllowedHosts::AllowedHosts(TMFE* mfe): cool_down_time(1000), retry_limit(10)
    fOdbEqSettings->RB("allow_self_registration",&allow_self_registration,true);
    std::vector<std::string> list;
    list.push_back("local_host");
-   fOdbEqSettings->RSA("allowed_hosts", &list,true,64);
+   fOdbEqSettings->RSA("allowed_hosts", &list,true,10,64);
    //Copy list of good hostnames into array of Host objects
    for (auto host: list)
       allowed_hosts.push_back(Host(host.c_str()));
    list.clear();
    list.push_back("bad_host_name");
-   fOdbEqSettings->RSA("banned_hosts", &list,true,64);
+   fOdbEqSettings->RSA("banned_hosts", &list,true,10,64);
    //Copy bad of good hostnames into array of Host objects
    for (auto host: list)
       banned_hosts.push_back(Host(host.c_str()));
@@ -1306,9 +1306,11 @@ void feGEMSupervisor::Init()
    fEq->fOdbEqSettings->RI("DefaultHistoryPeriod",&gHistoryPeriod,true);
    assert(fPort>0);
    fOdbWorkers=fEq->fOdbEqSettings->Chdir("WorkerList",true);
-   fOdbWorkers->WS("HostName","",32);
-   fOdbWorkers->WU32("DateAdded",0);
-   fOdbWorkers->WU32("Port",0);
+   //fOdbWorkers->WS("HostName","",32);
+   fOdbWorkers->RU32A("DateAdded", NULL, true, 1);
+   //fOdbWorkers->RU16A("Port", NULL, true, 1);
+   //fOdbWorkers->WU32("DateAdded",0);
+   //fOdbWorkers->WU32("Port",0);
    if (fEventBuf) {
       free(fEventBuf);
    }
@@ -1333,8 +1335,8 @@ void feGEMSupervisor::Init()
 
 std::pair<int,bool> feGEMSupervisor::FindHostInWorkerList(const char* hostname)
 {
-   std::vector<std::string> hostlist;
-   fOdbWorkers->RSA("HostName", &hostlist);
+   std::vector<std::string> hostlist={"local_host"};
+   fOdbWorkers->RSA("HostName", &hostlist,true,0,64);
    int size=hostlist.size();
    for (int i=0; i<size; i++)
    {
@@ -1345,20 +1347,21 @@ std::pair<int,bool> feGEMSupervisor::FindHostInWorkerList(const char* hostname)
          return {i,true};
       }
    }
-   fOdbWorkers->WSAI("HostName",size-1,hostname);
+   fOdbWorkers->WSAI("HostName",size,hostname);
+   fOdbWorkers->WU32AI("DateAdded",size,(uint32_t)std::time(0));
    std::cout<<"No Match... return size:"<<size<<std::endl;
    return {size,false};
 }
 
-int feGEMSupervisor::AssignPortForWorker(uint workerID)
+uint16_t feGEMSupervisor::AssignPortForWorker(uint workerID)
 {
-   std::vector<uint32_t> list;
+   std::vector<uint16_t> list;
    std::cout<<"WorkerID:"<<workerID<<std::endl;
-   fOdbWorkers->RU32A("Port", &list);
+   fOdbWorkers->RU16A("Port", &list,true,0);
    if (workerID>=list.size())
    {
       int port=fPort+workerID+1;
-      fOdbWorkers->WU32AI("Port",workerID-1,port);
+      fOdbWorkers->WU16AI("Port",workerID,port);
       return port;
    }
    else

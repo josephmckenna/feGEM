@@ -405,8 +405,8 @@ public:
    HistoryLogger logger;
    feGEMClass(TMFE* mfe, TMFeEquipment* eq , AllowedHosts* hosts, int type ):
       feGEMClassType(type),
-      message(mfe), 
-      periodicity(mfe,eq), 
+      periodicity(mfe,eq),
+      message(mfe),
       logger(mfe,eq)
    {
       allowed_hosts=hosts;
@@ -420,7 +420,7 @@ public:
       }
    }
    virtual std::pair<int,bool> FindHostInWorkerList(const char* hostname) { assert(0); return {-1,false}; };
-   virtual int AssignPortForWorker(uint workerID) { assert(0); return -1; };
+   virtual uint16_t AssignPortForWorker(uint workerID) { assert(0); return 0; };
    virtual const char* AddNewClient(const char* hostname) { assert(0); return NULL; };
 
    std::string HandleRpc(const char* cmd, const char* args);
@@ -462,7 +462,7 @@ public:
    void Init();
 
    virtual std::pair<int,bool> FindHostInWorkerList(const char* hostname);
-   virtual int AssignPortForWorker(uint workerID);
+   virtual uint16_t AssignPortForWorker(uint workerID);
    virtual const char* AddNewClient(const char* hostname);
   
 };
