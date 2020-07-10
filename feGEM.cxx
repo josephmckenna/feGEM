@@ -882,9 +882,8 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
    else if (strncmp(bank->NAME.VARNAME,"GIVE_ME_PORT",14)==0)
    {
       assert(feGEMClassType==SUPERVISOR);
-      std::pair<int,bool> WorkerNo=FindHostInWorkerList(bank->DATA->DATA);
-      assert(WorkerNo.second=true); //Assert the frontend thread is running
-      int port=AssignPortForWorker(WorkerNo.first);
+      int WorkerNo=FindHostInWorkerList(bank->DATA->DATA);
+      int port=AssignPortForWorker(WorkerNo);
       char log_to_port[80];
       sprintf(log_to_port,"%u",port);
       //std::cout<<"SEND TO PORT:"<<port<<std::endl;
@@ -1265,6 +1264,16 @@ void feGEMWorker::Init()
       //perror("bind failed"); 
       exit(1); 
    }
+   //Flush the buffer?!?
+   /*int new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
+   //if (new_socket>=0)
+   {
+      std::cout<<"SOCKET!:"<<new_socket<<std::endl;
+      while (!read( new_socket,NULL,1))
+      {
+	    std::cout<<"Flushing tcp"<<std::endl;
+	   }
+   }*/
    //assert (rc==0);
    TCP_thread=std::thread(&feGEMClass::Run,this);
 }
@@ -1333,7 +1342,7 @@ void feGEMSupervisor::Init()
    TCP_thread=std::thread(&feGEMClass::Run,this);
 }
 
-std::pair<int,bool> feGEMSupervisor::FindHostInWorkerList(const char* hostname)
+int feGEMSupervisor::FindHostInWorkerList(const char* hostname)
 {
    std::vector<std::string> hostlist={"local_host"};
    fOdbWorkers->RSA("HostName", &hostlist,true,0,64);
@@ -1344,13 +1353,13 @@ std::pair<int,bool> feGEMSupervisor::FindHostInWorkerList(const char* hostname)
       if (strcmp(hostlist.at(i).c_str(),hostname)==0)
       {
          std::cout<<"Match found!"<<std::endl;
-         return {i,true};
+         return i;
       }
    }
    fOdbWorkers->WSAI("HostName",size,hostname);
    fOdbWorkers->WU32AI("DateAdded",size,(uint32_t)std::time(0));
    std::cout<<"No Match... return size:"<<size<<std::endl;
-   return {size,false};
+   return size;
 }
 
 uint16_t feGEMSupervisor::AssignPortForWorker(uint workerID)
@@ -1373,11 +1382,12 @@ uint16_t feGEMSupervisor::AssignPortForWorker(uint workerID)
 const char* feGEMSupervisor::AddNewClient(const char* hostname)
 {
    std::cout<<"Check list of workers"<<std::endl;
-   std::pair<int,bool> WorkerNo=FindHostInWorkerList(hostname);
-   int port=AssignPortForWorker(WorkerNo.first);
-   std::cout<<"Assign port "<<port<< " for worker "<<WorkerNo.first<<std::endl;
-   if (WorkerNo.second==false)
+   int WorkerNo=FindHostInWorkerList(hostname);
+   int port=AssignPortForWorker(WorkerNo);
+   std::cout<<"Assign port "<<port<< " for worker "<<WorkerNo<<std::endl;
+   if (!WorkerIsRunning(WorkerNo))
    {
+      WorkerStarted(WorkerNo);
       //allowed_hosts->AddHost(hostname);
       std::string name = "feGEM_";
       name+=hostname;
@@ -1393,11 +1403,13 @@ const char* feGEMSupervisor::AddNewClient(const char* hostname)
 		 }*/
          //exit(1);
       }
+      std::cout<<"Fuck"<<std::endl;
       TMFeCommon *common = new TMFeCommon();
       common->EventID = 1;
       common->LogHistory = 1;
       TMFeEquipment* worker_eq = new TMFeEquipment(mfe, name.c_str(), common);
       worker_eq->Init();
+      std::cout<<"Arse"<<std::endl;
       worker_eq->SetStatus("Starting...", "white");
       worker_eq->ZeroStatistics();
       worker_eq->WriteStatistics();

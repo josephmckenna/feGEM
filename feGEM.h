@@ -419,7 +419,7 @@ public:
          fEventBuf = NULL;
       }
    }
-   virtual std::pair<int,bool> FindHostInWorkerList(const char* hostname) { assert(0); return {-1,false}; };
+   virtual int FindHostInWorkerList(const char* hostname) { assert(0); return -1; };
    virtual uint16_t AssignPortForWorker(uint workerID) { assert(0); return 0; };
    virtual const char* AddNewClient(const char* hostname) { assert(0); return NULL; };
 
@@ -460,8 +460,18 @@ public:
    feGEMSupervisor(TMFE* mfe, TMFeEquipment* eq);
 
    void Init();
-
-   virtual std::pair<int,bool> FindHostInWorkerList(const char* hostname);
+private:
+   std::vector<uint> RunningWorkers;
+public:
+   bool WorkerIsRunning(uint workerID)
+   {
+      for (auto& id: RunningWorkers)
+         if (id==workerID)
+            return true;
+      return false;
+   };
+   void WorkerStarted(uint workerID) { RunningWorkers.push_back(workerID); };
+   virtual int FindHostInWorkerList(const char* hostname);
    virtual uint16_t AssignPortForWorker(uint workerID);
    virtual const char* AddNewClient(const char* hostname);
   
