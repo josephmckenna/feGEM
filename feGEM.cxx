@@ -1394,13 +1394,11 @@ const char* feGEMSupervisor::AddNewClient(const char* hostname)
 		 }*/
          //exit(1);
       }
-      std::cout<<"Fuck"<<std::endl;
       TMFeCommon *common = new TMFeCommon();
       common->EventID = 1;
       common->LogHistory = 1;
       TMFeEquipment* worker_eq = new TMFeEquipment(mfe, name.c_str(), common);
       worker_eq->Init();
-      std::cout<<"Arse"<<std::endl;
       worker_eq->SetStatus("Starting...", "white");
       worker_eq->ZeroStatistics();
       worker_eq->WriteStatistics();
