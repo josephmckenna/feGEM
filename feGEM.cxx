@@ -14,7 +14,7 @@
 
 
 template<typename T>
-void GEMDATA<T>::print(uint32_t size, uint16_t TimestampEndianness, uint16_t DataEndianness, bool IsString) 
+void GEMDATA<T>::print(uint32_t size, uint16_t TimestampEndianness, uint16_t DataEndianness, bool IsString)  const
 {
    std::cout<<"   Coarse Time:"<<GetLabVIEWCoarseTime(TimestampEndianness)<<std::endl;
    std::cout<<"   Unix Time:"<<GetUnixTimestamp(TimestampEndianness)<<std::endl;;
@@ -168,13 +168,18 @@ const GEMDATA<T>* LVBANK<T>::GetFirstDataEntry() const
 {
    return &DATA[0];
 }
+template<typename T>
+const GEMDATA<T>* LVBANK<T>::GetDataEntry(uint32_t i) const
+{
+   char* ptr=(char*)&DATA;
+   ptr+=BlockSize*(i);
+   return (GEMDATA<T>*)ptr;
+}
 
 template<typename T>
 const GEMDATA<T>* LVBANK<T>::GetLastDataEntry() const
 {
-   char* ptr=(char*)&DATA;
-   ptr+=BlockSize*(NumberOfEntries-1);
-   return (GEMDATA<T>*)ptr;
+   return GetDataEntry(NumberOfEntries-1);
 }
 
 //--------------------------------------------------
@@ -743,20 +748,106 @@ void feGEMClass::HandleEndRun()
    RunStatus=Stopped;
 }
 
-void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
+void feGEMClass::HandleCommandBank(const GEMDATA<char>* bank,const char* command, const char* hostname)
 {
-   //bank->print();
-   if (strncmp(bank->NAME.VARNAME,"TALK",4)==0)
+   
+   //Add 'Commands' that can be sent to feGEM, they either change something or get a response back.
+
+
+   //Banks associated with a new commection (1/4)
+   if (strncmp(command,"START_FRONTEND",14)==0)
    {
-      bank->print();
-      fMfe->Msg(MTALK, fEq->fName.c_str(), (char*)bank->DATA->DATA);
-      if (strncmp(bank->NAME.VARCATEGORY,"THISHOST",8)==0)
-      {
-         periodicity.ProcessMessage(bank);
-      }
+      assert(feGEMClassType==SUPERVISOR);
+      message.QueueData("FrontendStatus",AddNewClient(&bank->DATA[0]));
       return;
    }
-   else if (strncmp(bank->NAME.VARNAME,"GET_RUNNO",9)==0)
+      //Banks associated with a new commection (2/4)
+   else if (strncmp(command,"ALLOW_HOST",14)==0)
+   {
+      if (!allowed_hosts->SelfRegistrationIsAllowed())
+      {
+         fMfe->Msg(MINFO, "feGEM", "LabVIEW host name %s tried to register its self on allowed host list, but self registration is disabled",hostname);
+         return;
+      }
+      if (strcmp(bank->DATA,hostname)!=0)
+      {
+         fMfe->Msg(MTALK, "feGEM", "LabVIEW host name %s does not match DNS lookup %s",bank->DATA,hostname);
+         allowed_hosts->AddHost(hostname);
+      }
+      allowed_hosts->AddHost(bank->DATA);
+      return;
+   }
+   //Banks associated with a new commection (3/4)
+   //Send the address for data to be logged to, assumes client uses the DNS
+   else if (strncmp(command,"GIVE_ME_ADDRESS",15)==0)
+   {
+      assert(feGEMClassType==SUPERVISOR);
+      message.QueueData("SendToAddress",thisHostname.c_str());
+      return;
+   }
+   //Banks associated with a new commection (4/4)
+   else if (strncmp(command,"GIVE_ME_PORT",14)==0)
+   {
+      assert(feGEMClassType==SUPERVISOR);
+      int WorkerNo=FindHostInWorkerList(bank->DATA);
+      int port=AssignPortForWorker(WorkerNo);
+      char log_to_port[80];
+      sprintf(log_to_port,"%u",port);
+      //std::cout<<"SEND TO PORT:"<<port<<std::endl;
+      std::cout<<log_to_port<<std::endl;
+      message.QueueData("SendToPort",log_to_port);
+      return;
+   }
+
+   else if (strncmp(command,"ALLOW_SSH_TUNNEL",16)==0) //VARNAME is only 15 char long
+   {
+      if (!allowed_hosts->SelfRegistrationIsAllowed())
+      {
+         fMfe->Msg(MINFO, "feGEM", "LabVIEW host name %s tried to register its self on allowed host list, but self registration is disabled",hostname);
+         return;
+      }
+      // We do not know the name of the host yet... they will reconnect on a new port...
+      // and, for example, lxplus might have a new alias)
+      allowed_hosts->AddHost(hostname);
+      return;
+   }
+   //Note all devices have their time correctly set (Many CRIO's)
+   //Note: Some devices don't have their own clocks... (arduino)... so lets support them too!
+   else if (strncmp(command,"CHECK_TIME_SYNC",15)==0)
+   {
+      using namespace std::chrono;
+      milliseconds ms = duration_cast< milliseconds >(
+         system_clock::now().time_since_epoch()
+      );
+      char buf[80];
+      sprintf(buf,"%f",(double)ms.count()/1000.+2082844800.);
+      std::cout<<"Time stamp for comparison:"<<buf<<std::endl;
+      message.QueueData("LV_TIME_NOW",buf);
+      return;
+   }
+   //Enable verbose JSON replies. DebugMode is tracked with an int for future flexibility
+   else if (strncmp(command,"ENABLE_DEBUG_MODE",17)==0)
+   {
+      assert(feGEMClassType==WORKER);
+      fDebugMode = 1;
+      return;
+   }
+   else if (strncmp(command,"DISABLE_DEBUG_MODE",18)==0)
+   {
+      assert(feGEMClassType==WORKER);
+      fDebugMode = 0;
+      return;
+   }
+   //Commonly used command, every connection is going to ask for the MIDAS every buffer size
+   else if (strncmp(command,"GET_EVENT_SIZE",14)==0)
+   {
+      char buf[80]={0};
+      //Format event size to string for JSON
+      sprintf(buf,"%d",fEventSize);
+      message.QueueData("EventSize",buf);
+      return;
+   }
+   else if (strncmp(command,"GET_RUNNO",9)==0)
    {
       char buf[20]={0};
       //Format RUNNO to string for JSON
@@ -764,21 +855,21 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
       message.QueueData("RunNumber",buf);
       return;
    }
-   else if (strncmp(bank->NAME.VARNAME,"GET_RUN_START_T",15)==0)
+   else if (strncmp(command,"GET_RUN_START_T",15)==0)
    {
       char buf[20]={0};
       sprintf(buf,"%u",RUN_START_T);
       message.QueueData("RunStartTime",buf);
       return;
    }
-   else if (strncmp(bank->NAME.VARNAME,"GET_RUN_STOP_T",14)==0)
+   else if (strncmp(command,"GET_RUN_STOP_T",14)==0)
    {
       char buf[20]={0};
       sprintf(buf,"%u",RUN_STOP_T);
       message.QueueData("RunStopTime",buf);
       return;
    }
-   else if (strncmp(bank->NAME.VARNAME,"GET_STATUS",10)==0)
+   else if (strncmp(command,"GET_STATUS",10)==0)
    {
       switch (RunStatus)
       {
@@ -794,41 +885,12 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
       }
       return;
    }
-   //Some devices don't have their own clocks... (arduino)... so lets support them too!
-   else if (strncmp(bank->NAME.VARNAME,"GET_TIME",8)==0)
-   {
-      if (strncmp(bank->NAME.VARCATEGORY,"CHECK_TIME_SYNC",15)==0)
-      {
-         using namespace std::chrono;
-         milliseconds ms = duration_cast< milliseconds >(
-            system_clock::now().time_since_epoch()
-         );
-         char buf[80];
-         sprintf(buf,"%f",(double)ms.count()/1000.+2082844800.);
-         std::cout<<"Time stamp for comparison:"<<buf<<std::endl;
-         message.QueueData("LV_TIME_NOW",buf);
-         
-         return;
-      }
-   }
-   else if (strncmp(bank->NAME.VARNAME,"TIME_DIFF",7)==0)
-   {
-      std::cout<<"TIME DIFF FOUND"<<std::endl;
-      bank->print();
-   }
-   else if (strncmp(bank->NAME.VARNAME,"GET_EVENT_SIZE",14)==0)
-   {
-      char buf[80]={0};
-      //Format event size to string for JSON
-      sprintf(buf,"%d",fEventSize);
-      message.QueueData("EventSize",buf);
-      return;
-   }
-   else if (strncmp(bank->NAME.VARNAME,"SET_EVENT_SIZE",14)==0)
+
+   else if (strncmp(command,"SET_EVENT_SIZE",14)==0)
    {
       assert(feGEMClassType==WORKER);
-      std::cout<<"Updating event size:"<<(char*)&bank->DATA->DATA<<std::endl;
-      int new_size=atoi((char*)&bank->DATA->DATA);
+      std::cout<<"Updating event size:"<<(char*)&bank->DATA<<std::endl;
+      int new_size=atoi((char*)&bank->DATA);
       if (new_size>fEventSize)
          fEventSize=new_size;
       if (fEventSize<10000)
@@ -840,55 +902,36 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
       std::cout<<"Event size updated to:"<<fEventSize<<std::endl;
       return;
    }
-   else if (strncmp(bank->NAME.VARNAME,"START_FRONTEND",14)==0)
+
+   else
    {
-      assert(feGEMClassType==SUPERVISOR);
-      message.QueueData("FrontendStatus",AddNewClient(bank->DATA->DATA));
-      return;
+      std::cout<<"Command not understood!"<<std::endl;
+      bank->print(strlen((char*)&bank->DATA),2,0,true);
    }
-   else if (strncmp(bank->NAME.VARNAME,"ALLOW_HOST",14)==0)
+   return;
+}
+
+void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
+{
+   //bank->print();
+
+   if (strncmp(bank->NAME.VARNAME,"COMMAND",7)==0)
    {
-      if (!allowed_hosts->SelfRegistrationIsAllowed())
+      const char* command=bank->NAME.EquipmentType;
+      for (uint32_t i=0; i<bank->NumberOfEntries; i++)
       {
-         fMfe->Msg(MINFO, "feGEM", "LabVIEW host name %s tried to register its self on allowed host list, but self registration is disabled",hostname);
-         return;
+         HandleCommandBank(bank->GetDataEntry(i),command,hostname);
       }
-      if (strcmp(bank->DATA->DATA,hostname)!=0)
+      return;
+   }
+   else if (strncmp(bank->NAME.VARNAME,"TALK",4)==0)
+   {
+      bank->print();
+      fMfe->Msg(MTALK, fEq->fName.c_str(), (char*)bank->DATA->DATA);
+      if (strncmp(bank->NAME.VARCATEGORY,"THISHOST",8)==0)
       {
-         fMfe->Msg(MTALK, "feGEM", "LabVIEW host name %s does not match DNS lookup %s",bank->DATA->DATA,hostname);
-         allowed_hosts->AddHost(hostname);
+         periodicity.ProcessMessage(bank);
       }
-      allowed_hosts->AddHost(bank->DATA->DATA);
-      return;
-   }
-   else if (strncmp(bank->NAME.VARNAME,"ALLOW_SSH_TUNNEL",15)==0) //VARNAME is only 15 char long
-   {
-      if (!allowed_hosts->SelfRegistrationIsAllowed())
-      {
-         fMfe->Msg(MINFO, "feGEM", "LabVIEW host name %s tried to register its self on allowed host list, but self registration is disabled",hostname);
-         return;
-      }
-      // We do not know the name of the host yet... they will reconnect on a new port...
-      // and, for example, lxplus might have a new alias)
-      allowed_hosts->AddHost(hostname);
-      return;
-   }
-   else if (strncmp(bank->NAME.VARNAME,"GIVE_ME_ADDRESS",15)==0)
-   {
-      assert(feGEMClassType==SUPERVISOR);
-      message.QueueData("SendToAddress","alphamidastest8");
-      return;
-   }
-   else if (strncmp(bank->NAME.VARNAME,"GIVE_ME_PORT",14)==0)
-   {
-      assert(feGEMClassType==SUPERVISOR);
-      int WorkerNo=FindHostInWorkerList(bank->DATA->DATA);
-      int port=AssignPortForWorker(WorkerNo);
-      char log_to_port[80];
-      sprintf(log_to_port,"%u",port);
-      //std::cout<<"SEND TO PORT:"<<port<<std::endl;
-      std::cout<<log_to_port<<std::endl;
-      message.QueueData("SendToPort",log_to_port);
       return;
    }
    else if (strncmp(bank->NAME.VARCATEGORY,"CLIENT_INFO",14)==0)
@@ -897,6 +940,10 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
       fEq->fOdbEqSettings->WS(bank->NAME.VARNAME, bank->DATA[0].DATA);
       return;
    }
+   
+
+  
+   
    //Put every UTF-8 character into a string and send it as JSON
    else
    {
@@ -909,7 +956,21 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
 void feGEMClass::LogBank(const char* buf, const char* hostname)
 {
    LVBANK<void*>* ThisBank=(LVBANK<void*>*)buf;
-   std::cout<<ThisBank->NAME.VARNAME<<std::endl;
+   if (fDebugMode)
+   {
+      char buf[200];
+      sprintf(buf,
+              "Received: %.16s/%.16s - %dx ( %d x %.4s ) [%d bytes]",
+              ThisBank->NAME.VARCATEGORY,
+              ThisBank->NAME.VARNAME,
+              ThisBank->NumberOfEntries,
+              ThisBank->GetFirstDataEntry()->GetEntries(ThisBank->BlockSize),
+              ThisBank->NAME.DATATYPE,
+              ThisBank->GetTotalSize()
+              );
+      message.QueueMessage(buf);
+   }
+   //std::cout<<ThisBank->NAME.VARNAME<<std::endl;
    if (strncmp(ThisBank->NAME.DATATYPE,"DBL",3)==0) {
       LVBANK<double>* bank=(LVBANK<double>*)buf;
       //bank->print();
@@ -1185,7 +1246,10 @@ void feGEMClass::ServeHost()
    std::chrono::time_point<std::chrono::system_clock> timer_stop=std::chrono::high_resolution_clock::now();
    std::chrono::duration<double, std::milli> handlingtime=timer_stop - timer_start;
    //std::cout<<"["<<fEq->fName.c_str()<<"] Handling time: "<<handlingtime.count()*1000 <<"ms"<<std::endl;
-   printf ("[%s] Handled %c%c%c%c %d banks (%d bytes) in %fms\n",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],nbanks,read_status,handlingtime.count());
+   printf ("[%s] Handled %c%c%c%c %d banks (%d bytes) in %fms",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],nbanks,read_status,handlingtime.count());
+   if (fDebugMode)
+      printf(" (debug mode on)");
+   printf("\n");
    char buf[100];
    sprintf(buf,"DATA OK");
    message.QueueMessage(buf);
@@ -1205,10 +1269,11 @@ void feGEMClass::ServeHost()
 }
 
 
-feGEMWorker::feGEMWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts): feGEMClass(mfe,eq,hosts,WORKER)
+feGEMWorker::feGEMWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts, int debugMode): feGEMClass(mfe,eq,hosts,WORKER,debugMode)
 {
    fMfe = mfe;
    fEq  = eq;
+   
    //Default event size ok 10kb, will be overwritten by ODB entry in Init()
    fEventSize = 10000;
    fEventBuf  = NULL;
@@ -1241,6 +1306,9 @@ feGEMWorker::feGEMWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts): feG
 }
 void feGEMWorker::Init()
 {
+
+   fMfe->Msg(MINFO,fEq->fName.c_str(),"Initialising %s...",fEq->fName.c_str());
+
    fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
    lastEventSize=fEventSize;
    fEq->fOdbEqSettings->WS("feVariables","No variables logged yet...",32);
@@ -1372,6 +1440,7 @@ uint16_t feGEMSupervisor::AssignPortForWorker(uint workerID)
 
 const char* feGEMSupervisor::AddNewClient(const char* hostname)
 {
+   std::cout<<"Adding host:"<<hostname<<std::endl;
    std::cout<<"Check list of workers"<<std::endl;
    int WorkerNo=FindHostInWorkerList(hostname);
    int port=AssignPortForWorker(WorkerNo);
@@ -1386,21 +1455,19 @@ const char* feGEMSupervisor::AddNewClient(const char* hostname)
       if (name.size()>31)
       {
          mfe->Msg(MERROR, name.c_str(), "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
-         /*std::string tmp=name;
-         name="";
-         for (int i=0; i<16; i++)
+         std::string tmp=name;
+         name.clear();
+         for (int i=0; i<31; i++)
          {
-			 name+=tmp[i];
-		 }*/
+            name+=tmp[i];
+         }
          //exit(1);
       }
-      std::cout<<"Fuck"<<std::endl;
       TMFeCommon *common = new TMFeCommon();
       common->EventID = 1;
       common->LogHistory = 1;
       TMFeEquipment* worker_eq = new TMFeEquipment(mfe, name.c_str(), common);
       worker_eq->Init();
-      std::cout<<"Arse"<<std::endl;
       worker_eq->SetStatus("Starting...", "white");
       worker_eq->ZeroStatistics();
       worker_eq->WriteStatistics();

@@ -72,7 +72,7 @@ class GEMDATA {
    //LabVIEW formatted time... (128bit)
    LVTimestamp timestamp;
    T DATA[];
-   void print(uint32_t size, uint16_t TimestampEndianness, uint16_t DataEndianness, bool IsString);
+   void print(uint32_t size, uint16_t TimestampEndianness, uint16_t DataEndianness, bool IsString) const;
    uint32_t GetHeaderSize() const            { return sizeof(timestamp); }
    uint32_t GetEntries(uint32_t size) const  { return (size-GetHeaderSize())/sizeof(T);      }
    
@@ -138,8 +138,10 @@ class LVBANK {
    uint32_t GetTotalSize(); //Size including header
    void ClearHeader();
    const GEMDATA<T>* GetFirstDataEntry() const;
-   const int64_t GetFirstUnixTimestamp() const { return GetFirstDataEntry()->GetUnixTimestamp(TimestampEndianness); }
+   const GEMDATA<T>* GetDataEntry(uint32_t i) const;
    const GEMDATA<T>* GetLastDataEntry() const;
+
+   const int64_t GetFirstUnixTimestamp() const { return GetFirstDataEntry()->GetUnixTimestamp(TimestampEndianness); }
    const int64_t GetLastUnixTimestamp() const  { return GetLastDataEntry()->GetUnixTimestamp(TimestampEndianness);  }
 };
 
@@ -388,6 +390,10 @@ public:
    int fEventSize;
    int lastEventSize; //Used to monitor any changes to fEventSize
    char* fEventBuf;
+   //JSON Verbosity control
+   int fDebugMode;
+
+   std::string thisHostname;
 
    //Periodic task query items (sould only be send from worker class... not yet limited)
    RunStatusType RunStatus;
@@ -403,13 +409,20 @@ public:
 
    
    HistoryLogger logger;
-   feGEMClass(TMFE* mfe, TMFeEquipment* eq , AllowedHosts* hosts, int type ):
+   feGEMClass(TMFE* mfe, TMFeEquipment* eq , AllowedHosts* hosts, int type, int debugMode = 0 ):
       feGEMClassType(type),
       periodicity(mfe,eq),
       message(mfe),
       logger(mfe,eq)
    {
-      allowed_hosts=hosts;
+      allowed_hosts = hosts;
+      fDebugMode = debugMode;
+      char hostname[100];
+      gethostname(hostname,100);
+      //Store as std::string in this class
+      thisHostname = hostname;
+      //Hostname must be known!
+      assert(thisHostname.size()>0);
    }
    ~feGEMClass() // dtor
    {
@@ -427,6 +440,7 @@ public:
    void HandleBeginRun();
    void HandleEndRun();
    void HandleStrBank(LVBANK<char>* bank,const char* hostname);
+   void HandleCommandBank(const GEMDATA<char>* bank,const char* command,const char* hostname);
    void LogBank(const char* buf,const char* hostname);
    int HandleBankArray(const char * ptr,const char* hostname);
    int HandleBank(const char * ptr,const char* hostname);
@@ -443,7 +457,7 @@ class feGEMWorker :
 {
    public:
 
-   feGEMWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts);
+   feGEMWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts, int debugMode = 0);
    void Init();
 
 };
@@ -466,8 +480,14 @@ public:
    bool WorkerIsRunning(uint workerID)
    {
       for (auto& id: RunningWorkers)
+      {
          if (id==workerID)
+         {
+            std::cout<<"Working is already runnning"<<std::endl;
             return true;
+         }
+      }
+      std::cout<<"Working is not yet runnning"<<std::endl;
       return false;
    };
    void WorkerStarted(uint workerID) { RunningWorkers.push_back(workerID); };
