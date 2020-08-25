@@ -208,7 +208,8 @@ class SettingsFileDatabase
       SettingsFileDatabasePath=path;
    }
    void SaveSettingsFile(GEMBANK<char>* bank,MessageHandler* message);
-   void LoadSettingsFile(GEMBANK<char>* bank,MessageHandler* message);
+   void LoadSettingsFile(GEMBANK<char>* bank,MessageHandler* message,int offset=0);
+   void ListSettingsFile(GEMBANK<char>* bank,MessageHandler* message);
    //static int nameFilter(const struct dirent *entry);
 };
 

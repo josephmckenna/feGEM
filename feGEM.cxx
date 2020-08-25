@@ -1038,10 +1038,9 @@ long GetFileSize(std::string filename)
     int rc = stat(filename.c_str(), &stat_buf);
     return rc == 0 ? stat_buf.st_size : -1;
 }
-
-void SettingsFileDatabase::LoadSettingsFile(GEMBANK<char>* bank,MessageHandler* message)
+//Use offset to load older versions
+void SettingsFileDatabase::LoadSettingsFile(GEMBANK<char>* bank,MessageHandler* message,int offset)
 {
-         
    assert(bank->NumberOfEntries==1);
    //Subtract the timestamp size in the data block
    int size=bank->BlockSize-16;
@@ -1125,10 +1124,48 @@ void SettingsFileDatabase::LoadSettingsFile(GEMBANK<char>* bank,MessageHandler* 
    std::cout<<"LoadedFileMD5:"<<result.c_str()<<std::endl;
 //Filename,MD5,Filecontenst
    std::cout<<"Load-SpecialChars:"<<specialCharCount<<std::endl;
-   message->QueueData("FileName",chosenFile,strlen(chosenFile));
-   message->QueueData("MD5",result.c_str(),result.size());
-   message->QueueData("FileContents",buf,chosenFileSize);
+   int blob_size=strlen(chosenFile)+result.size()+chosenFileSize+8;
+   char SettingFileBlob[blob_size];
 
+   int position=0;
+   position++;
+   SettingFileBlob[0]='"';
+   position+=strlen(chosenFile);
+   strncpy(&SettingFileBlob[position],chosenFile,strlen(chosenFile));
+   
+   position++;
+   SettingFileBlob[position]='"';
+   position++;
+   SettingFileBlob[position]=',';
+   position++;
+   SettingFileBlob[position]='"';
+
+   position+=result.size();
+   strncpy(&SettingFileBlob[position],result.c_str(),result.size());
+
+   position++;
+   SettingFileBlob[position]='"';
+   position++;
+   SettingFileBlob[position]=',';
+   position++;
+   SettingFileBlob[position]='"';
+
+   position+=chosenFileSize;
+   strncpy(&SettingFileBlob[position],buf,chosenFileSize);
+
+   position++;
+   SettingFileBlob[position]='"';
+
+   message->QueueData("SettingsFile",SettingFileBlob,blob_size);
+
+   //message->QueueData("FileName",chosenFile,strlen(chosenFile));
+   //message->QueueData("MD5",result.c_str(),result.size());
+   //message->QueueData("FileContents",buf,chosenFileSize);
+
+   return;
+}
+void SettingsFileDatabase::ListSettingsFile(GEMBANK<char>* bank,MessageHandler* message)
+{
    return;
 }
 
@@ -1167,8 +1204,18 @@ void feGEMClass::HandleStrBank(GEMBANK<char>* bank,const char* hostname)
       if (strncmp(bank->NAME.VARNAME,"SAVE",4)==0)
          return SettingsDataBase->SaveSettingsFile(bank,&message);
       if (strncmp(bank->NAME.VARNAME,"LOAD",4)==0)
-         return SettingsDataBase->LoadSettingsFile(bank,&message);
-      
+      {
+         int offset=0;
+         //Use offset: LOAD-2 means LOAD two revisions ago
+         if (bank->NAME.VARNAME[4])
+            offset=atoi(&bank->NAME.VARNAME[4]);
+         return SettingsDataBase->LoadSettingsFile(bank,&message,offset);
+      }
+      if (strncmp(bank->NAME.VARNAME,"LIST",4)==0)
+      {
+         assert("IMPLEMENT ME");
+         return SettingsDataBase->ListSettingsFile(bank,&message);
+      }
    }
   
    
