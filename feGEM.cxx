@@ -91,7 +91,7 @@ std::string BANK_TITLE::SanitiseBankString(const char* input, int assert_size) c
 }  
 
 //--------------------------------------------------
-// LVBANK object
+// GEMBANK object
 // A class to contain a bundle of GEMDATA objects
 // Contents:
 //    Variable, Category and Equipment names
@@ -101,7 +101,7 @@ std::string BANK_TITLE::SanitiseBankString(const char* input, int assert_size) c
 //--------------------------------------------------
 
 template<typename T>
-void LVBANK<T>::printheader() const
+void GEMBANK<T>::printheader() const
 {
    NAME.print();
    std::cout<<"  HistorySettings:"<<HistorySettings<<std::endl;
@@ -113,7 +113,7 @@ void LVBANK<T>::printheader() const
 }
 
 template<typename T>
-void LVBANK<T>::print() const
+void GEMBANK<T>::print() const
 {
    printheader();
    bool IsString=false;
@@ -129,7 +129,7 @@ void LVBANK<T>::print() const
 }
 
 template<typename T>
-uint32_t LVBANK<T>::GetHeaderSize()
+uint32_t GEMBANK<T>::GetHeaderSize()
 {
    return sizeof(NAME)
           + sizeof(HistorySettings)
@@ -141,13 +141,13 @@ uint32_t LVBANK<T>::GetHeaderSize()
 }
 
 template<typename T>
-uint32_t LVBANK<T>::GetTotalSize()
+uint32_t GEMBANK<T>::GetTotalSize()
 {
    return GetHeaderSize()+BlockSize*NumberOfEntries;
 }
 
 template<typename T>
-void LVBANK<T>::ClearHeader()
+void GEMBANK<T>::ClearHeader()
 {
    //Char arrays are NULL terminated... so NULL the first character
    NAME.BANK[0]=0;
@@ -164,12 +164,12 @@ void LVBANK<T>::ClearHeader()
 }
 
 template<typename T>
-const GEMDATA<T>* LVBANK<T>::GetFirstDataEntry() const
+const GEMDATA<T>* GEMBANK<T>::GetFirstDataEntry() const
 {
    return &DATA[0];
 }
 template<typename T>
-const GEMDATA<T>* LVBANK<T>::GetDataEntry(uint32_t i) const
+const GEMDATA<T>* GEMBANK<T>::GetDataEntry(uint32_t i) const
 {
    char* ptr=(char*)&DATA;
    ptr+=BlockSize*(i);
@@ -177,21 +177,21 @@ const GEMDATA<T>* LVBANK<T>::GetDataEntry(uint32_t i) const
 }
 
 template<typename T>
-const GEMDATA<T>* LVBANK<T>::GetLastDataEntry() const
+const GEMDATA<T>* GEMBANK<T>::GetLastDataEntry() const
 {
    return GetDataEntry(NumberOfEntries-1);
 }
 
 //--------------------------------------------------
-// LVBANKARRAY object
-// A simple contaner to hold an array of LVBANKs
+// GEMBANKARRAY object
+// A simple contaner to hold an array of GEMBANKs
 // Contents:
 //    BANK array ID number
-//    Array of LVBANKs
+//    Array of GEMBANKs
 //    Size
 //--------------------------------------------------
 
-void LVBANKARRAY::ClearHeader()
+void GEMBANKARRAY::ClearHeader()
 {
    for (int i=0; i<4; i++)
       BANK[i]=0;
@@ -200,7 +200,7 @@ void LVBANKARRAY::ClearHeader()
    NumberOfEntries=-1;
 }
 
-void LVBANKARRAY::print()
+void GEMBANKARRAY::print()
 {
    printf("-------------------------\n");
    printf("BANK:%.4s\n",BANK);
@@ -473,10 +473,10 @@ bool AllowedHosts::IsListedAsQuestionable(const char* hostname)
 //--------------------------------------------------
 // History Variable
 // Hold link to ODB path of variable
-// Monitor the last time we updated the ODB (only update at the periodicity specificed in LVBANK)
+// Monitor the last time we updated the ODB (only update at the periodicity specificed in GEMBANK)
 //--------------------------------------------------
 template<typename T>
-HistoryVariable::HistoryVariable(const LVBANK<T>* GEM_bank, TMFE* mfe,TMFeEquipment* eq )
+HistoryVariable::HistoryVariable(const GEMBANK<T>* GEM_bank, TMFE* mfe,TMFeEquipment* eq )
 {
    fCategory=GEM_bank->GetCategoryName();
    fVarName=GEM_bank->GetVariableName();
@@ -500,7 +500,7 @@ HistoryVariable::HistoryVariable(const LVBANK<T>* GEM_bank, TMFE* mfe,TMFeEquipm
    fOdbEqVariables  = OdbEq->Chdir("Variables", true);
 }
 template<typename T>
-bool HistoryVariable::IsMatch(const LVBANK<T>* GEM_bank)
+bool HistoryVariable::IsMatch(const GEMBANK<T>* GEM_bank)
 {
    if (strcmp(fCategory.c_str(),GEM_bank->GetCategoryName().c_str())!=0)
       return false;
@@ -509,7 +509,7 @@ bool HistoryVariable::IsMatch(const LVBANK<T>* GEM_bank)
    return true;
 }
 template<typename T>
-void HistoryVariable::Update(const LVBANK<T>* GEM_bank)
+void HistoryVariable::Update(const GEMBANK<T>* GEM_bank)
 {
    if (!UpdateFrequency)
       return;
@@ -546,7 +546,7 @@ HistoryLogger::~HistoryLogger()
 }
 
 template<typename T>
-HistoryVariable* HistoryLogger::AddNewVariable(const LVBANK<T>* GEM_bank)
+HistoryVariable* HistoryLogger::AddNewVariable(const GEMBANK<T>* GEM_bank)
 {
    //Assert that category and var name are null terminated
    //assert(GEM_bank->NAME.VARCATEGORY[15]==0);
@@ -571,7 +571,7 @@ HistoryVariable* HistoryLogger::AddNewVariable(const LVBANK<T>* GEM_bank)
 }
 
 template<typename T>
-HistoryVariable* HistoryLogger::Find(const LVBANK<T>* GEM_bank, bool AddIfNotFound=true)
+HistoryVariable* HistoryLogger::Find(const GEMBANK<T>* GEM_bank, bool AddIfNotFound=true)
 {
    HistoryVariable* FindThis=NULL;
    //Find HistoryVariable that matches 
@@ -592,7 +592,7 @@ HistoryVariable* HistoryLogger::Find(const LVBANK<T>* GEM_bank, bool AddIfNotFou
 }
 
 template<typename T>
-void HistoryLogger::Update(const LVBANK<T>* GEM_bank)
+void HistoryLogger::Update(const GEMBANK<T>* GEM_bank)
 {
    HistoryVariable* UpdateThis=Find(GEM_bank,true);
    UpdateThis->Update(GEM_bank);
@@ -694,7 +694,7 @@ void PeriodicityManager::UpdatePerodicity()
    fPeriodicWithoutData=0;
 }
 
-void PeriodicityManager::ProcessMessage(LVBANK<char>* bank)
+void PeriodicityManager::ProcessMessage(GEMBANK<char>* bank)
 {
    //std::cout<<(char*)&(bank->DATA[0].DATA)<<std::endl;
    if ((strncmp((char*)&(bank->DATA->DATA),"New labview connection from",27)==0) ||
@@ -910,8 +910,105 @@ void feGEMClass::HandleCommandBank(const GEMDATA<char>* bank,const char* command
    }
    return;
 }
+void SettingsFileDatabase::SaveSettingsFile(GEMBANK<char>* bank,const char* hostname)
+{
+      
+   assert(bank->NumberOfEntries==1);
+   //Subtract the timestamp size in the data block
+   int size=bank->BlockSize-16;
 
-void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
+   //Data layout: [VIName][NULL][Filename][NULL][BINARYDATA][NULL]
+   const GEMDATA<char>* gemdata=bank->GetFirstDataEntry();
+
+   char* start = (char*) &(gemdata->DATA[0]);
+   char* ptr = start;
+   char* end = ptr + size;
+
+   std::string ProjectName="";
+   while (ptr < end)
+   {
+      if (*ptr=='\0')
+         break;
+      if (*ptr!='/')
+         ProjectName+=*ptr;
+      ptr++;
+   }
+   ptr++;
+   std::string Filename="";
+   while (ptr < end)
+   {
+      if (*ptr=='\0')
+         break;
+      if (*ptr!='/')
+         Filename+=*ptr;
+      ptr++;
+   }
+   ptr++;
+   char* BinaryData=ptr;
+
+   //STR banks are null terminated and we dont need it here!
+   int file_size=(int)(end - BinaryData) - 1; 
+
+   //Save path: /ODBSetSavePath/ProjectName/Filename
+   std::string SavePath=SettingsFileDatabasePath;
+   mkdir(SavePath.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+   SavePath+='/';
+   SavePath+=ProjectName.c_str();
+   mkdir(SavePath.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+   SavePath+='/';
+   SavePath+=Filename.c_str();
+   
+   //Add unix time 
+   std::time_t unixtime = std::time(nullptr);
+   SavePath+='.';
+   SavePath+=std::to_string(unixtime);
+   std::cout<<"Save to path:"<<SavePath.c_str()<<std::endl;
+
+   //Check MD5 checksum
+   unsigned char digest[MD5_DIGEST_LENGTH];
+   MD5((unsigned char*) BinaryData, file_size, digest);
+
+   //Convert MD5 digest to hex string
+   static const char hexchars[] = "0123456789abcdef";
+   std::string result;
+   for (int i = 0; i < MD5_DIGEST_LENGTH; i++)
+   {
+      unsigned char b = digest[i];
+      char hex[3];
+
+      hex[0] = hexchars[b >> 4];
+      hex[1] = hexchars[b & 0xF];
+      hex[2] = 0;
+
+      result.append(hex);
+   }
+
+   if (strncmp(result.c_str(),bank->NAME.EquipmentType,32) == 0 )
+      std::cout<<"Save: CHECK SUM GOOD!"<<std::endl;
+   std::cout<<"Save:\t"<<result.c_str()<<"\tvs\t"<<bank->NAME.EquipmentType<<std::endl;
+
+   //Write the file we recieved to file
+   std::ofstream ofs(SavePath.c_str(),std::ofstream::out);
+   for (int i=0; i<size; i++)
+   {
+      ofs<<BinaryData[i];
+   }
+   ofs.close();
+
+   //Write out the md5 to its own file
+   std::ofstream ofmd5( (SavePath+".md5").c_str(),std::ofstream::out);
+   ofmd5<<result.c_str();
+   ofmd5.close();
+   
+   return;
+}
+void SettingsFileDatabase::LoadSettingsFile(GEMBANK<char>* bank,const char* hostname)
+{
+   
+   return;
+}
+
+void feGEMClass::HandleStrBank(GEMBANK<char>* bank,const char* hostname)
 {
    //bank->print();
 
@@ -940,8 +1037,15 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
       fEq->fOdbEqSettings->WS(bank->NAME.VARNAME, bank->DATA[0].DATA);
       return;
    }
-   
-
+   else if (strncmp(bank->NAME.VARCATEGORY,"SETTINGS_FILE",13)==0)
+   {
+      //The settings files doesn't need to go to midas... skip logger.Update
+      if (strncmp(bank->NAME.VARNAME,"SAVE",4)==0)
+         return SettingsDataBase->SaveSettingsFile(bank,hostname);
+      if (strncmp(bank->NAME.VARNAME,"LOAD",4)==0)
+         return SettingsDataBase->LoadSettingsFile(bank,hostname);
+      
+   }
   
    
    //Put every UTF-8 character into a string and send it as JSON
@@ -955,7 +1059,7 @@ void feGEMClass::HandleStrBank(LVBANK<char>* bank,const char* hostname)
 
 void feGEMClass::LogBank(const char* buf, const char* hostname)
 {
-   LVBANK<void*>* ThisBank=(LVBANK<void*>*)buf;
+   GEMBANK<void*>* ThisBank=(GEMBANK<void*>*)buf;
    if (fDebugMode)
    {
       char buf[200];
@@ -972,45 +1076,45 @@ void feGEMClass::LogBank(const char* buf, const char* hostname)
    }
    //std::cout<<ThisBank->NAME.VARNAME<<std::endl;
    if (strncmp(ThisBank->NAME.DATATYPE,"DBL",3)==0) {
-      LVBANK<double>* bank=(LVBANK<double>*)buf;
+      GEMBANK<double>* bank=(GEMBANK<double>*)buf;
       //bank->print();
       logger.Update(bank);
    } else if (strncmp(ThisBank->NAME.DATATYPE,"FLT",3)==0) {
-      LVBANK<float>* bank=(LVBANK<float>*)buf;
+      GEMBANK<float>* bank=(GEMBANK<float>*)buf;
       logger.Update(bank);
    } else if (strncmp(ThisBank->NAME.DATATYPE,"BOOL",4)==0) {
-      LVBANK<bool>* bank=(LVBANK<bool>*)buf;
+      GEMBANK<bool>* bank=(GEMBANK<bool>*)buf;
       logger.Update(bank);
    //Not supported by ODB
    /*} else if (strncmp(ThisBank->NAME.DATATYPE,"I64",3)==0) {
-      LVBANK<int64_t>* bank=(LVBANK<int64_t>*)buf;
+      GEMBANK<int64_t>* bank=(GEMBANK<int64_t>*)buf;
       logger.Update(bank);
    } else if (strncmp(ThisBank->NAME.DATATYPE,"U64",3)==0) {
-      LVBANK<uint64_t>* bank=(LVBANK<uint64_t>*)buf;
+      GEMBANK<uint64_t>* bank=(GEMBANK<uint64_t>*)buf;
       logger.Update(bank);*/
    } else if (strncmp(ThisBank->NAME.DATATYPE,"I32",3)==0) {
-      LVBANK<int32_t>* bank=(LVBANK<int32_t>*)buf;
+      GEMBANK<int32_t>* bank=(GEMBANK<int32_t>*)buf;
       logger.Update(bank);
    } else if (strncmp(ThisBank->NAME.DATATYPE,"U32",4)==0) {
-      LVBANK<uint32_t>* bank=(LVBANK<uint32_t>*)buf;
+      GEMBANK<uint32_t>* bank=(GEMBANK<uint32_t>*)buf;
       //bank->print();
       logger.Update(bank);
    //Not supported by ODB
    /*} else if (strncmp(ThisBank->NAME.DATATYPE,"I16",3)==0) {
-      LVBANK<int16_t>* bank=(LVBANK<int16_t>*)buf;
+      GEMBANK<int16_t>* bank=(GEMBANK<int16_t>*)buf;
       logger.Update(bank);*/
    } else if (strncmp(ThisBank->NAME.DATATYPE,"U16",3)==0) {
-      LVBANK<uint16_t>* bank=(LVBANK<uint16_t>*)buf;
+      GEMBANK<uint16_t>* bank=(GEMBANK<uint16_t>*)buf;
       logger.Update(bank);
    /*} else if (strncmp(ThisBank->NAME.DATATYPE,"I8",2)==0) {
-      LVBANK<int8_t>* bank=(LVBANK<int8_t>*)buf;
+      GEMBANK<int8_t>* bank=(GEMBANK<int8_t>*)buf;
       logger.Update(bank);
    } else if (strncmp(ThisBank->NAME.DATATYPE,"U8",2)==0) {
-      LVBANK<uint8_t>* bank=(LVBANK<uint8_t>*)buf;
+      GEMBANK<uint8_t>* bank=(GEMBANK<uint8_t>*)buf;
       logger.Update(bank);*/
    
    } else if (strncmp(ThisBank->NAME.DATATYPE,"STR",3)==0) {
-      LVBANK<char>* bank=(LVBANK<char>*)buf;
+      GEMBANK<char>* bank=(GEMBANK<char>*)buf;
       HandleStrBank(bank,hostname);
       return;
    } else {
@@ -1023,7 +1127,7 @@ void feGEMClass::LogBank(const char* buf, const char* hostname)
 
 int feGEMClass::HandleBankArray(const char * ptr,const char* hostname)
 {
-   LVBANKARRAY* array=(LVBANKARRAY*)ptr;
+   GEMBANKARRAY* array=(GEMBANKARRAY*)ptr;
    if (array->GetTotalSize() > (uint32_t)fEventSize)
    {
       char error[100];
@@ -1038,7 +1142,7 @@ int feGEMClass::HandleBankArray(const char * ptr,const char* hostname)
    char *buf=(char*)&array->DATA[0];
    for (uint32_t i=0; i<array->NumberOfEntries; i++)
    {
-      LVBANK<double>* bank=(LVBANK<double>*)buf;
+      GEMBANK<double>* bank=(GEMBANK<double>*)buf;
       HandleBank(buf, hostname);
       buf+=bank->GetHeaderSize()+bank->BlockSize*bank->NumberOfEntries;
    }
@@ -1048,7 +1152,7 @@ int feGEMClass::HandleBankArray(const char * ptr,const char* hostname)
 int feGEMClass::HandleBank(const char * ptr,const char* hostname)
 {
    //Use invalid data type to probe the header
-   LVBANK<void*>* ThisBank=(LVBANK<void*>*)ptr;
+   GEMBANK<void*>* ThisBank=(GEMBANK<void*>*)ptr;
    //ThisBank->print();
    if (ThisBank->BlockSize+ThisBank->GetHeaderSize() > (uint32_t)fEventSize)
    {
@@ -1132,8 +1236,8 @@ void feGEMClass::ServeHost()
       return;
    }
    //Make sure header memory is clean
-   ((LVBANKARRAY*)fEventBuf)->ClearHeader();
-   ((LVBANK<void*>*)fEventBuf)->ClearHeader();
+   ((GEMBANKARRAY*)fEventBuf)->ClearHeader();
+   ((GEMBANK<void*>*)fEventBuf)->ClearHeader();
    bool legal_message=false;
    //Prepare the MIDAS bank so that we can directly write into from the TCP buffer
    fEq->ComposeEvent(fEventBuf, fEventSize);
@@ -1146,8 +1250,8 @@ void feGEMClass::ServeHost()
    int position=0;
    int BankSize=-1;
    // Get the first chunk of the message (must be atleast the header of the data coming)
-   // The header of a LVBANK is 88 bytes
-   // The header of a LVBANKARRAY is 32 bytes
+   // The header of a GEMBANK is 88 bytes
+   // The header of a GEMBANKARRAY is 32 bytes
    // So... the minimum data we need for GetTotalSize() to work is 88 bytes
    int max_reads=100000;
    //std::vector<std::sting>={"LVA1","LVB1","PYA1","PYA1"};
@@ -1183,12 +1287,12 @@ void feGEMClass::ServeHost()
    //We have the header... check for compliant data type and get the total size (BankSize)
    if (strncmp(ptr,"GEA1",4)==0 )
    {
-      LVBANKARRAY* bank=(LVBANKARRAY*)ptr;
+      GEMBANKARRAY* bank=(GEMBANKARRAY*)ptr;
       BankSize=bank->GetTotalSize();
    }
    else if (strncmp(ptr,"GEB1",4)==0 )
    {
-      LVBANK<void*>* bank=(LVBANK<void*>*)ptr;
+      GEMBANK<void*>* bank=(GEMBANK<void*>*)ptr;
       BankSize=bank->GetTotalSize();
    }   //std::cout<<"BankSize:"<<BankSize<<std::endl;
    else
@@ -1201,7 +1305,7 @@ void feGEMClass::ServeHost()
       return;
    }
    
-   //The header looks ok, lets get the whole thing LVBANK / LVBANKARRAY
+   //The header looks ok, lets get the whole thing GEMBANK / GEMBANKARRAY
    while (position<BankSize)
    {
       read_status= read( new_socket , ptr+position, BankSize-position);
@@ -1210,7 +1314,7 @@ void feGEMClass::ServeHost()
       if (--max_reads == 0)
       {
          char message[100];
-         sprintf(message,"TCP Read timeout getting LVBANKARRAY, got %d bytes, expected %d",position,BankSize);
+         sprintf(message,"TCP Read timeout getting GEMBANKARRAY, got %d bytes, expected %d",position,BankSize);
          fMfe->Msg(MTALK, "feGEM", message);
          return;
       } 
@@ -1304,10 +1408,31 @@ feGEMWorker::feGEMWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts, int 
    //fEq->fOdbEqCommon->RI("Period",&period);
    //fEq->fCommon->Period=period;
 }
-void feGEMWorker::Init()
+void feGEMWorker::Init(MVOdb* supervisor_settings_path)
 {
-
+   fOdbSupervisorSettings=supervisor_settings_path;
    fMfe->Msg(MINFO,fEq->fName.c_str(),"Initialising %s...",fEq->fName.c_str());
+
+   //Set the path of feGEM as the default path for settings database
+   const int bufsize=200;
+   char buf[bufsize]={0};
+   readlink("/proc/self/exe",buf,bufsize);
+
+   //Remove everything after last forwardslash (ie /feGEM.exe)
+   for (int i=bufsize; i>0; i--)
+   {
+      if (buf[i]=='/')
+      {
+         buf[i]='\0';
+         break;
+      }
+   }
+
+   std::string SettingsFileDatabasePath=buf;
+   SettingsFileDatabasePath+="/SettingsDatabase";
+   fOdbSupervisorSettings->RS("settings_cache_path", &SettingsFileDatabasePath,true);
+   std::cout<<"Save"<<SettingsFileDatabasePath<<std::endl;
+   SettingsDataBase=new SettingsFileDatabase(SettingsFileDatabasePath.c_str());
 
    fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
    lastEventSize=fEventSize;
@@ -1475,7 +1600,7 @@ const char* feGEMSupervisor::AddNewClient(const char* hostname)
       feGEMWorker* workerfe = new feGEMWorker(mfe,worker_eq,allowed_hosts);
       workerfe->fPort=port;
       mfe->RegisterRpcHandler(workerfe);
-      workerfe->Init();
+      workerfe->Init(fEq->fOdbEqSettings);
       mfe->RegisterPeriodicHandler(worker_eq, workerfe);
       //mfe->StartRpcThread();
       //mfe->StartPeriodicThread();
@@ -1594,7 +1719,7 @@ int main(int argc, char* argv[])
       feGEMWorker* myfe = new feGEMWorker(mfe,eq,new AllowedHosts(mfe));
       myfe->fPort=port;
       mfe->RegisterRpcHandler(myfe);
-      myfe->Init();
+      myfe->Init(eq->fOdbEqSettings);
       mfe->RegisterPeriodicHandler(eq, myfe);
    }
    //mfe->SetTransitionSequenceStart(910);

@@ -17,6 +17,9 @@
 #include "midas.h"
 #include "tmfe.h"
 
+
+
+
 enum LVEndianess { BigEndian, NativeEndian, LittleEndian};
 template <class T>
 T change_endian(T in)
@@ -73,6 +76,7 @@ class GEMDATA {
    LVTimestamp timestamp;
    T DATA[];
    void print(uint32_t size, uint16_t TimestampEndianness, uint16_t DataEndianness, bool IsString) const;
+   operator T*() { return &DATA[0]; }
    uint32_t GetHeaderSize() const            { return sizeof(timestamp); }
    uint32_t GetEntries(uint32_t size) const  { return (size-GetHeaderSize())/sizeof(T);      }
    
@@ -117,7 +121,7 @@ class BANK_TITLE {
 };
 
 template<typename T>
-class LVBANK {
+class GEMBANK {
    public:
    BANK_TITLE NAME;
    uint16_t HistorySettings;
@@ -145,7 +149,7 @@ class LVBANK {
    const int64_t GetLastUnixTimestamp() const  { return GetLastDataEntry()->GetUnixTimestamp(TimestampEndianness);  }
 };
 
-class LVBANKARRAY {
+class GEMBANKARRAY {
    public:
    char BANK[4];
    uint32_t BankArrayID;
@@ -165,6 +169,25 @@ class LVBANKARRAY {
    void ClearHeader();
    void print();
 };
+
+
+#include <openssl/md5.h>
+#include <map>
+class SettingsFileDatabase
+{
+   private:
+   std::string SettingsFileDatabasePath;
+   //std::mutex lock;
+   std::map<std::string,std::string> ActiveFileHashs;
+   public:
+   SettingsFileDatabase(const char* path)
+   {
+      SettingsFileDatabasePath=path;
+   }
+   void SaveSettingsFile(GEMBANK<char>* bank,const char* hostname);
+   void LoadSettingsFile(GEMBANK<char>* bank,const char* hostname);
+};
+
 #include "msystem.h"
 
 
@@ -282,11 +305,11 @@ class HistoryVariable
    int UpdateFrequency;
    MVOdb* fOdbEqVariables; 
    template<typename T>
-   HistoryVariable(const LVBANK<T>* lvbank, TMFE* mfe,TMFeEquipment* eq );
+   HistoryVariable(const GEMBANK<T>* gembank, TMFE* mfe,TMFeEquipment* eq );
    template<typename T>
-   bool IsMatch(const LVBANK<T>* lvbank);
+   bool IsMatch(const GEMBANK<T>* gembank);
    template<typename T>
-   void Update(const LVBANK<T>* lvbank);
+   void Update(const GEMBANK<T>* gembank);
    private:
    void WriteODB(std::vector<bool>& data)
    {
@@ -338,11 +361,11 @@ public:
    HistoryLogger(TMFE* mfe,TMFeEquipment* eq);
    ~HistoryLogger();
    template<typename T>
-   HistoryVariable* AddNewVariable(const LVBANK<T>* lvbank);
+   HistoryVariable* AddNewVariable(const GEMBANK<T>* gembank);
    template<typename T>
-   HistoryVariable* Find(const LVBANK<T>* lvbank, bool AddIfNotFound);
+   HistoryVariable* Find(const GEMBANK<T>* gembank, bool AddIfNotFound);
    template<typename T>
-   void Update(const LVBANK<T>* lvbank);
+   void Update(const GEMBANK<T>* gembank);
 };
 
 
@@ -364,7 +387,7 @@ class PeriodicityManager
    void LogPeriodicWithData();
    void LogPeriodicWithoutData();
    void UpdatePerodicity();
-   void ProcessMessage(LVBANK<char>* bank);
+   void ProcessMessage(GEMBANK<char>* bank);
    const int GetWaitPeriod() { return fPeriod; }
 };
 
@@ -400,6 +423,9 @@ public:
    int RUNNO;
    uint32_t RUN_START_T;
    uint32_t  RUN_STOP_T;
+
+   SettingsFileDatabase* SettingsDataBase=NULL;
+
    // Network security
    AllowedHosts* allowed_hosts;
 
@@ -439,7 +465,7 @@ public:
    std::string HandleRpc(const char* cmd, const char* args);
    void HandleBeginRun();
    void HandleEndRun();
-   void HandleStrBank(LVBANK<char>* bank,const char* hostname);
+   void HandleStrBank(GEMBANK<char>* bank,const char* hostname);
    void HandleCommandBank(const GEMDATA<char>* bank,const char* command,const char* hostname);
    void LogBank(const char* buf,const char* hostname);
    int HandleBankArray(const char * ptr,const char* hostname);
@@ -456,9 +482,9 @@ class feGEMWorker :
    public feGEMClass
 {
    public:
-
+   MVOdb* fOdbSupervisorSettings;
    feGEMWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts, int debugMode = 0);
-   void Init();
+   void Init(MVOdb* supervisor_settings_path);
 
 };
 
