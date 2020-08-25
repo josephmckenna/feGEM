@@ -171,22 +171,6 @@ class GEMBANKARRAY {
 };
 
 
-#include <openssl/md5.h>
-#include <map>
-class SettingsFileDatabase
-{
-   private:
-   std::string SettingsFileDatabasePath;
-   //std::mutex lock;
-   std::map<std::string,std::string> ActiveFileHashs;
-   public:
-   SettingsFileDatabase(const char* path)
-   {
-      SettingsFileDatabasePath=path;
-   }
-   void SaveSettingsFile(GEMBANK<char>* bank,const char* hostname);
-   void LoadSettingsFile(GEMBANK<char>* bank,const char* hostname);
-};
 
 #include "msystem.h"
 
@@ -195,7 +179,7 @@ class MessageHandler
 {
    private:
       TMFE* fMfe;
-      std::vector<std::string> JSONMessageQueue;
+      std::vector<std::vector<char>> JSONMessageQueue;
       std::vector<std::string> JSONErrorQueue;
       int TotalText;
    public:
@@ -205,7 +189,27 @@ class MessageHandler
    void QueueData(const char* name, const char* msg, int length=-1);
    void QueueMessage(const char* msg);
    void QueueError(const char* source, const char* err);
-   std::string ReadMessageQueue(double midas_time);
+   std::vector<char> ReadMessageQueue(double midas_time);
+};
+#include <openssl/md5.h>
+#include <map>
+#include <dirent.h>
+static std::string find_filename;
+class SettingsFileDatabase
+{
+   private:
+   std::string SettingsFileDatabasePath;
+   //std::mutex lock;
+   std::map<std::string,std::string> ActiveFileHashs;
+   
+   public:
+   SettingsFileDatabase(const char* path)
+   {
+      SettingsFileDatabasePath=path;
+   }
+   void SaveSettingsFile(GEMBANK<char>* bank,MessageHandler* message);
+   void LoadSettingsFile(GEMBANK<char>* bank,MessageHandler* message);
+   //static int nameFilter(const struct dirent *entry);
 };
 
 #include <list>

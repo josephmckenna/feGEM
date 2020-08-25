@@ -228,7 +228,9 @@ MessageHandler::~MessageHandler()
    {
       std::cout<<"WARNING: Messages not flushed:"<<std::endl;
       for (auto msg: JSONMessageQueue)
-         std::cout<< msg<<std::endl;
+         for (char c: msg)
+            std::cout<< c;
+         std::cout<<std::endl;
    }
    if (JSONErrorQueue.size())
    {
@@ -242,7 +244,21 @@ void MessageHandler::QueueData(const char* name,const char* data, int length)
 {
    if (length<0)
       length=strlen(data);
-   std::string message=std::string("\"")+std::string(name)+std::string(":")+data+std::string("\"");
+   std::vector<char> message;
+   message.reserve(length+strlen(name)+3);
+   message.push_back('"');
+   for (size_t i=0; i<strlen(name); i++)
+   {
+      message.push_back(name[i]);
+   }
+   message.push_back(':');
+   for (int i=0; i<length; i++)
+   {
+      if (data[i]=='"')
+         message.push_back('\\');
+      message.push_back(data[i]);
+   }
+   message.push_back('"');
    JSONMessageQueue.push_back(message);
    TotalText+=message.size();
 }
@@ -268,28 +284,32 @@ void MessageHandler::QueueError(const char* source, const char* err)
    QueueData("err",err,len);
 }
 
-std::string MessageHandler::ReadMessageQueue(double midas_time)
+std::vector<char> MessageHandler::ReadMessageQueue(double midas_time)
 {
    //Build basic JSON string ["msg:This is a message to LabVIEW","err:This Is An Error Message"]
-   std::string msg;
+   std::vector<char> msg;
    msg.reserve(TotalText+JSONMessageQueue.size()+JSONErrorQueue.size()+1+20);
-   msg+="[\"MIDASTime:"+std::to_string(midas_time)+"\",";
+   std::string buf="[\"MIDASTime:"+std::to_string(midas_time)+"\",";
+   for (char c: buf)
+      msg.push_back(c);
    int i=0;
    for (auto Message: JSONMessageQueue)
    {
       if (i++>0)
-         msg+=",";
-      msg+=Message;
+         msg.push_back(',');
+      for (char c: Message)
+         msg.push_back(c);
    }
    JSONMessageQueue.clear();
    for (auto Error: JSONErrorQueue)
    {
       if (i++>0)
-         msg+=",";
-      msg+=Error;
+         msg.push_back(',');
+      for (char c: Error)
+         msg.push_back(c);
    }
    JSONErrorQueue.clear();
-   msg+="]";
+   msg.push_back(']');
    return msg;
 }
 
@@ -910,7 +930,7 @@ void feGEMClass::HandleCommandBank(const GEMDATA<char>* bank,const char* command
    }
    return;
 }
-void SettingsFileDatabase::SaveSettingsFile(GEMBANK<char>* bank,const char* hostname)
+void SettingsFileDatabase::SaveSettingsFile(GEMBANK<char>* bank,MessageHandler* message)
 {
       
    assert(bank->NumberOfEntries==1);
@@ -956,6 +976,7 @@ void SettingsFileDatabase::SaveSettingsFile(GEMBANK<char>* bank,const char* host
    SavePath+=ProjectName.c_str();
    mkdir(SavePath.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
    SavePath+='/';
+   std::string MD5_file=(SavePath+std::string("md5.")+Filename).c_str();
    SavePath+=Filename.c_str();
    
    //Add unix time 
@@ -989,22 +1010,125 @@ void SettingsFileDatabase::SaveSettingsFile(GEMBANK<char>* bank,const char* host
 
    //Write the file we recieved to file
    std::ofstream ofs(SavePath.c_str(),std::ofstream::out);
-   for (int i=0; i<size; i++)
+   for (int i=0; i<file_size; i++)
    {
       ofs<<BinaryData[i];
    }
    ofs.close();
 
    //Write out the md5 to its own file
-   std::ofstream ofmd5( (SavePath+".md5").c_str(),std::ofstream::out);
+   std::ofstream ofmd5( MD5_file.c_str(),std::ofstream::out);
    ofmd5<<result.c_str();
    ofmd5.close();
    
    return;
 }
-void SettingsFileDatabase::LoadSettingsFile(GEMBANK<char>* bank,const char* hostname)
+
+static int nameFilter(const struct dirent *entry)
 {
+   if (strncmp(entry->d_name,find_filename.c_str(),find_filename.size())==0)
+   {
+      return 1;
+   }
+   return 0;
+}
+long GetFileSize(std::string filename)
+{
+    struct stat stat_buf;
+    int rc = stat(filename.c_str(), &stat_buf);
+    return rc == 0 ? stat_buf.st_size : -1;
+}
+
+void SettingsFileDatabase::LoadSettingsFile(GEMBANK<char>* bank,MessageHandler* message)
+{
+         
+   assert(bank->NumberOfEntries==1);
+   //Subtract the timestamp size in the data block
+   int size=bank->BlockSize-16;
+
+   //Data layout: [VIName][NULL][Filename][NULL][BINARYDATA][NULL]
+   const GEMDATA<char>* gemdata=bank->GetFirstDataEntry();
+
+   char* start = (char*) &(gemdata->DATA[0]);
+   char* ptr = start;
+   char* end = ptr + size;
+
+   std::string ProjectName="";
+   while (ptr < end)
+   {
+      if (*ptr=='\0')
+         break;
+      if (*ptr!='/')
+         ProjectName+=*ptr;
+      ptr++;
+   }
+   ptr++;
+   std::string Filename="";
+   while (ptr < end)
+   {
+      if (*ptr=='\0')
+         break;
+      if (*ptr!='/')
+         Filename+=*ptr;
+      ptr++;
+   }
+   ptr++;
    
+   //Save path: /ODBSetSavePath/ProjectName/Filename
+   std::string LoadPath=SettingsFileDatabasePath;
+   LoadPath+='/';
+   LoadPath+=ProjectName.c_str();
+   LoadPath+='/';
+   //LoadPath+=Filename.c_str();
+   find_filename=Filename;
+   struct dirent **namelist;
+   int n = scandir( LoadPath.c_str() , &namelist, *nameFilter, alphasort );
+   std::cout<<"Load: "<<n <<"items match?"<<std::endl;
+   for (int i=0; i<n; i++)
+   {
+      std::cout<<"Load\t"<<namelist[i]->d_name<<std::endl;
+   }
+
+   const char* chosenFile=namelist[n-1]->d_name;
+   long chosenFileSize=GetFileSize((LoadPath+chosenFile).c_str());
+   std::cout<<"LoadFileSize:"<<chosenFileSize<<std::endl;
+   std::ifstream ifs ((LoadPath+chosenFile).c_str(), std::ifstream::in);
+
+   char buf[chosenFileSize];
+   int specialCharCount=0;
+   for (int i=0; i<chosenFileSize; i++)
+   {
+      buf[i]=ifs.get();
+      if (buf[i]=='"')
+        specialCharCount++;
+   }
+   ifs.close();
+
+   //Check MD5 checksum
+   unsigned char digest[MD5_DIGEST_LENGTH];
+   MD5((unsigned char*) buf, chosenFileSize, digest);
+
+   //Convert MD5 digest to hex string
+   static const char hexchars[] = "0123456789abcdef";
+   std::string result;
+   for (int i = 0; i < MD5_DIGEST_LENGTH; i++)
+   {
+      unsigned char b = digest[i];
+      char hex[3];
+
+      hex[0] = hexchars[b >> 4];
+      hex[1] = hexchars[b & 0xF];
+      hex[2] = 0;
+
+      result.append(hex);
+   }
+   std::cout<<"LoadedFileMD5:"<<result.c_str()<<std::endl;
+//Filename,MD5,Filecontenst
+   std::cout<<"Load-SpecialChars:"<<specialCharCount<<std::endl;
+   message->QueueData("FileName",chosenFile,strlen(chosenFile));
+   message->QueueData("MD5",result.c_str(),result.size());
+   message->QueueData("FileContents",buf,chosenFileSize);
+
    return;
 }
 
@@ -1041,9 +1165,9 @@ void feGEMClass::HandleStrBank(GEMBANK<char>* bank,const char* hostname)
    {
       //The settings files doesn't need to go to midas... skip logger.Update
       if (strncmp(bank->NAME.VARNAME,"SAVE",4)==0)
-         return SettingsDataBase->SaveSettingsFile(bank,hostname);
+         return SettingsDataBase->SaveSettingsFile(bank,&message);
       if (strncmp(bank->NAME.VARNAME,"LOAD",4)==0)
-         return SettingsDataBase->LoadSettingsFile(bank,hostname);
+         return SettingsDataBase->LoadSettingsFile(bank,&message);
       
    }
   
@@ -1358,9 +1482,13 @@ void feGEMClass::ServeHost()
    sprintf(buf,"DATA OK");
    message.QueueMessage(buf);
    bool KillFrontend=message.HaveErrors();
-   std::string reply=message.ReadMessageQueue(handlingtime.count());
-   //std::cout<<"Sending "<<reply.size()<<" bytes"<<std::endl;
-   send(new_socket, reply.c_str(), reply.size(), 0 );
+   std::vector<char> reply=message.ReadMessageQueue(handlingtime.count());
+   //for (char c: reply)
+   //   std::cout<<c;
+   std::cout<<"Sending "<<reply.size()<<" bytes"<<std::endl;
+   //send(new_socket, reply.c_str(), reply.size(), 0 );
+   send(new_socket, (char*)&(reply[0]), reply.size(), 0 );
+   
    read( new_socket, NULL,0);
    close(new_socket);
    
