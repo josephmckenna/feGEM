@@ -17,7 +17,7 @@ MODULES = $(LIB_DIR)/mfe.o
 all::feGEM.exe
 
 feGEM.exe: %.exe: %.o
-	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS)
+	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS) -lssl -lcrypto
 
 
 
