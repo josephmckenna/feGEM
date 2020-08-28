@@ -187,6 +187,7 @@ class MessageHandler
    ~MessageHandler();
    bool HaveErrors() {return JSONErrorQueue.size();};
    void QueueData(const char* name, const char* msg, int length=-1);
+   void QueueData(const char* name,std::vector<const char*> data, std::vector<size_t> length);
    void QueueMessage(const char* msg);
    void QueueError(const char* source, const char* err);
    std::vector<char> ReadMessageQueue(double midas_time);
@@ -207,6 +208,7 @@ class SettingsFileDatabase
    {
       SettingsFileDatabasePath=path;
    }
+   std::string base64_encode(unsigned char const* bytes_to_encode, size_t in_len);
    void SaveSettingsFile(GEMBANK<char>* bank,MessageHandler* message);
    void LoadSettingsFile(GEMBANK<char>* bank,MessageHandler* message,int offset=0);
    void ListSettingsFile(GEMBANK<char>* bank,MessageHandler* message);

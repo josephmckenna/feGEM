@@ -262,7 +262,38 @@ void MessageHandler::QueueData(const char* name,const char* data, int length)
    JSONMessageQueue.push_back(message);
    TotalText+=message.size();
 }
+void MessageHandler::QueueData(const char* name,std::vector<const char*> data, std::vector<size_t> length)
+{
+   std::vector<char> message;
+   int size_estimate=strlen(name)+3;
+   for (size_t i=0; i<length.size(); i++)
+   {
+      size_estimate+=length[i]+1;
+   }
+   message.reserve(size_estimate);
+   message.push_back('"');
+   for (size_t i=0; i<strlen(name); i++)
+   {
+      message.push_back(name[i]);
+   }
+   message.push_back(':');
+   for (size_t i=0; i<length.size(); i++)
+   {
+      for (size_t j=0; j<length.at(i); j++)
+      {
+         char c=data.at(i)[j];
+         message.push_back(c);
+      }
+      if (i!=length.size()-1)
+      {
+         message.push_back(',');
+      }
+   }
+   message.push_back('"');
+   JSONMessageQueue.push_back(message);
+   TotalText+=message.size();
 
+}
 void MessageHandler::QueueMessage(const char* msg)
 {
    int len=strlen(msg);
@@ -1038,6 +1069,55 @@ long GetFileSize(std::string filename)
     int rc = stat(filename.c_str(), &stat_buf);
     return rc == 0 ? stat_buf.st_size : -1;
 }
+
+
+std::string SettingsFileDatabase::base64_encode(unsigned char const* bytes_to_encode, size_t in_len)
+{
+
+   size_t len_encoded = (in_len +2) / 3 * 4;
+
+   unsigned char trailing_char = '=';
+   const char* base64_chars = 
+             "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+             "abcdefghijklmnopqrstuvwxyz"
+             "0123456789"
+             "+/";
+
+   std::string ret;
+   ret.reserve(len_encoded);
+
+   unsigned int pos = 0;
+
+   while (pos < in_len) {
+      ret.push_back(base64_chars[(bytes_to_encode[pos + 0] & 0xfc) >> 2]);
+
+      if (pos+1 < in_len) {
+         ret.push_back(base64_chars[((bytes_to_encode[pos + 0] & 0x03) << 4) + ((bytes_to_encode[pos + 1] & 0xf0) >> 4)]);
+
+           if (pos+2 < in_len) {
+              ret.push_back(base64_chars[((bytes_to_encode[pos + 1] & 0x0f) << 2) + ((bytes_to_encode[pos + 2] & 0xc0) >> 6)]);
+              ret.push_back(base64_chars[  bytes_to_encode[pos + 2] & 0x3f]);
+           }
+           else {
+              ret.push_back(base64_chars[(bytes_to_encode[pos + 1] & 0x0f) << 2]);
+              ret.push_back(trailing_char);
+           }
+        }
+        else {
+
+            ret.push_back(base64_chars[(bytes_to_encode[pos + 0] & 0x03) << 4]);
+            ret.push_back(trailing_char);
+            ret.push_back(trailing_char);
+        }
+
+        pos += 3;
+    }
+
+
+    return ret;
+}
+
+
 //Use offset to load older versions
 void SettingsFileDatabase::LoadSettingsFile(GEMBANK<char>* bank,MessageHandler* message,int offset)
 {
@@ -1123,7 +1203,7 @@ void SettingsFileDatabase::LoadSettingsFile(GEMBANK<char>* bank,MessageHandler* 
    }
    std::cout<<"LoadedFileMD5:"<<result.c_str()<<std::endl;
 //Filename,MD5,Filecontenst
-   std::cout<<"Load-SpecialChars:"<<specialCharCount<<std::endl;
+   /*std::cout<<"Load-SpecialChars:"<<specialCharCount<<std::endl;
    int blob_size=strlen(chosenFile)+result.size()+chosenFileSize+8;
    char SettingFileBlob[blob_size];
 
@@ -1155,9 +1235,23 @@ void SettingsFileDatabase::LoadSettingsFile(GEMBANK<char>* bank,MessageHandler* 
 
    position++;
    SettingFileBlob[position]='"';
-
-   message->QueueData("SettingsFile",SettingFileBlob,blob_size);
-
+*/
+   std::string data=base64_encode((unsigned char*)buf,chosenFileSize);
+   std::string ChosenFileDate=&chosenFile[Filename.size()+1];
+   //message->QueueData("SettingsFile",SettingFileBlob,blob_size);
+   message->QueueData("SettingsFile", {
+                                          ProjectName.c_str(),
+                                          Filename.c_str(),
+                                          ChosenFileDate.c_str(),
+                                          result.c_str(),
+                                          data.c_str()
+                                       } , { 
+                                          ProjectName.size(),
+                                          Filename.size(),
+                                          ChosenFileDate.size(),
+                                          result.size(),
+                                          data.size()
+                                       });
    //message->QueueData("FileName",chosenFile,strlen(chosenFile));
    //message->QueueData("MD5",result.c_str(),result.size());
    //message->QueueData("FileContents",buf,chosenFileSize);
