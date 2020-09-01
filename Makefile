@@ -12,11 +12,11 @@ LIB = $(LIB_DIR)/libmidas.a -lrt
 #MODBUS_DIR = $(MIDASSYS)/drivers/divers
 #CFLAGS += -I$(MODBUS_DIR)
 
-MODULES = $(LIB_DIR)/mfe.o
+MODULES = $(LIB_DIR)/mfe.o 
 
-all::feGEM.exe
+all::feGEM.exe 
 
-feGEM.exe: %.exe: %.o
+feGEM.exe: %.exe: feGEMmain.o %.o GEM_BANK.o MessageHandler.o AllowedHosts.o HistoryLogger.o PeriodicityManager.o SettingsFileDatabase.o
 	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS) -lssl -lcrypto
 
 
