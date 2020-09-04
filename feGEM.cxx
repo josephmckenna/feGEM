@@ -788,19 +788,20 @@ const char* feGEMSupervisor::AddNewClient(const char* hostname)
       std::string name = "feGEM_";
       name+=hostname;
       TMFE* mfe=fMfe;
-      if (name.size()>31)
+      if (name.size()>15)
       {
          mfe->Msg(MERROR, name.c_str(), "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
          std::string tmp=name;
          name.clear();
-         for (int i=0; i<31; i++)
+         for (int i=0; i<15; i++)
          {
             name+=tmp[i];
          }
+         mfe->Msg(MERROR, name.c_str(), "Frontend name [%s] too long. Shortenening hostname to [%s]", tmp.c_str(), name.c_str());
          //exit(1);
       }
       TMFeCommon *common = new TMFeCommon();
-      common->EventID = 1;
+      common->EventID = 3;
       common->LogHistory = 1;
       TMFeEquipment* worker_eq = new TMFeEquipment(mfe, name.c_str(), common);
       worker_eq->Init();
