@@ -801,7 +801,7 @@ const char* feGEMSupervisor::AddNewClient(const char* hostname)
          //exit(1);
       }
       TMFeCommon *common = new TMFeCommon();
-      common->EventID = 3;
+      common->EventID = 1;
       common->LogHistory = 1;
       TMFeEquipment* worker_eq = new TMFeEquipment(mfe, name.c_str(), common);
       worker_eq->Init();
