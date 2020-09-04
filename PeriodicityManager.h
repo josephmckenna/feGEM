@@ -13,6 +13,7 @@ class PeriodicityManager
    TMFE* fMfe;
    int fPeriodicWithData;
    int fPeriodicWithoutData;
+   MVOdb* fOdbStatistics; 
 
    public:
    PeriodicityManager(TMFE* mfe,TMFeEquipment* eq);
