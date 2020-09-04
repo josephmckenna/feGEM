@@ -62,7 +62,7 @@ void PeriodicityManager::LogPeriodicWithData()
          //The usage of the periodic tasks is beyond spec... perhaps a user didn't initialise connect properly
          fMfe->Msg(MTALK,
                   fEq->fName.c_str(), "%s periodic tasks are very busy... miss use of the LabVIEW library?",
-                  fMfe->fFrontendName.c_str()
+                  fEq->fName.c_str()
                   );
          fMfe->Msg(MINFO,
                   fEq->fName.c_str(),
@@ -85,10 +85,10 @@ void PeriodicityManager::LogPeriodicWithoutData()
 
 void PeriodicityManager::UpdatePerodicity()
 {
-   std::cout<<fPeriod <<" > "<< 1000./ (double)fNumberOfConnections<<std::endl;
-   if (fPeriod > 1000./ (double)fNumberOfConnections)
+  std::cout<<fPeriod <<" > "<< 1000 <<"./"<< (double)fNumberOfConnections<< " +  1"<<std::endl;
+   if (fPeriod > 1000./ ((double)fNumberOfConnections + 1))
    {
-      fPeriod = 1000./ (double)fNumberOfConnections;
+     fPeriod = 1000./ ((double)fNumberOfConnections + 1);
       std::cout<<"Periodicity increase to "<<fPeriod<<"ms"<<std::endl;
    }
    fPeriodicWithData=0;
