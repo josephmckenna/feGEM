@@ -9,10 +9,10 @@
 
 PeriodicityManager::PeriodicityManager(TMFE* mfe,TMFeEquipment* eq)
 {
-   fPeriod=1000;
+   fPeriod=500;
    fEq=eq;
    fMfe=mfe;
-   fNumberOfConnections=1;
+   fNumberOfConnections=0;
    fPeriodicWithData=0;
    fPeriodicWithoutData=0;
    fOdbStatistics=eq->fOdbEqStatistics;
@@ -77,6 +77,9 @@ void PeriodicityManager::LogPeriodicWithData()
          std::cout<<"Traffic low or inconsistance for fronent:"<<fMfe->fFrontendName.c_str()<<std::endl;
       }
    }
+   fOdbStatistics->WI("Periodicicity",fPeriod);
+   fOdbStatistics->WI("Connections",fNumberOfConnections);
+
    fOdbStatistics->WI("PeriodicsWithData",fPeriodicWithData);
    fOdbStatistics->WI("SparePeriodics",fPeriodicWithoutData);
 }
@@ -89,7 +92,7 @@ void PeriodicityManager::LogPeriodicWithoutData()
 void PeriodicityManager::UpdatePerodicity()
 {
    std::cout<<fPeriod <<" > "<< 1000. << " / " << (double)fNumberOfConnections << " + 1 "<<std::endl;
-   if (fPeriod > 1000./ (double)fNumberOfConnections + 1)
+   if (fPeriod > 1000./ ((double)fNumberOfConnections + 1))
    {
       fPeriod = 1000./ ((double)fNumberOfConnections + 1);
       std::cout<<"Periodicity increase to "<<fPeriod<<"ms"<<std::endl;
@@ -100,9 +103,9 @@ void PeriodicityManager::UpdatePerodicity()
 
 void PeriodicityManager::ProcessMessage(GEMBANK<char>* bank)
 {
-   //std::cout<<(char*)&(bank->DATA[0].DATA)<<std::endl;
-   if ((strncmp((char*)&(bank->DATA->DATA),"New labview connection from",27)==0) ||
-       (strncmp((char*)&(bank->DATA->DATA),"New python connection from",26)==0))
+  std::cout<<"PROCESS:"<<(char*)&(bank->DATA[0].DATA)<<std::endl;
+   if ((strncmp((char*)&(bank->DATA[0].DATA),"New labview connection from",27)==0) ||
+       (strncmp((char*)&(bank->DATA[0].DATA),"New python connection from",26)==0))
    {
       size_t NameLength=1023;
       char ProgramName[NameLength+1];
