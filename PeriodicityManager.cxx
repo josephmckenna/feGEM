@@ -15,6 +15,7 @@ PeriodicityManager::PeriodicityManager(TMFE* mfe,TMFeEquipment* eq)
    fNumberOfConnections=1;
    fPeriodicWithData=0;
    fPeriodicWithoutData=0;
+   fOdbStatistics=eq->fOdbEqStatistics;
 }
 
 const char* PeriodicityManager::ProgramName(char* string)
@@ -76,6 +77,8 @@ void PeriodicityManager::LogPeriodicWithData()
          std::cout<<"Traffic low or inconsistance for fronent:"<<fMfe->fFrontendName.c_str()<<std::endl;
       }
    }
+   fOdbStatistics->WI("PeriodicsWithData",fPeriodicWithData);
+   fOdbStatistics->WI("SparePeriodics",fPeriodicWithoutData);
 }
 
 void PeriodicityManager::LogPeriodicWithoutData()
@@ -85,10 +88,10 @@ void PeriodicityManager::LogPeriodicWithoutData()
 
 void PeriodicityManager::UpdatePerodicity()
 {
-  std::cout<<fPeriod <<" > "<< 1000 <<"./"<< (double)fNumberOfConnections<< " +  1"<<std::endl;
-   if (fPeriod > 1000./ ((double)fNumberOfConnections + 1))
+   std::cout<<fPeriod <<" > "<< 1000. << " / " << (double)fNumberOfConnections << " + 1 "<<std::endl;
+   if (fPeriod > 1000./ (double)fNumberOfConnections + 1)
    {
-     fPeriod = 1000./ ((double)fNumberOfConnections + 1);
+      fPeriod = 1000./ ((double)fNumberOfConnections + 1);
       std::cout<<"Periodicity increase to "<<fPeriod<<"ms"<<std::endl;
    }
    fPeriodicWithData=0;
