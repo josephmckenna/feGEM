@@ -222,10 +222,10 @@ void feGEMClass::HandleStrBank(GEMBANK<char>* bank,const char* hostname)
    {
       bank->print();
       fMfe->Msg(MTALK, fEq->fName.c_str(), (char*)bank->DATA->DATA);
-      if (strncmp(bank->NAME.VARCATEGORY,"THISHOST",8)==0)
-      {
-         periodicity.ProcessMessage(bank);
-      }
+      //if (strncmp(bank->NAME.VARCATEGORY,"THISHOST",8)==0)
+      //{
+      periodicity.ProcessMessage(bank);
+         //}
       return;
    }
    else if (strncmp(bank->NAME.VARCATEGORY,"CLIENT_INFO",14)==0)
@@ -412,6 +412,7 @@ void feGEMClass::ServeHost()
    int new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
    if (new_socket<0) 
    { 
+      periodicity.LogPeriodicWithoutData();
       //perror("accept"); 
       //exit(EXIT_FAILURE); 
       return;
