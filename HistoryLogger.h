@@ -10,6 +10,7 @@
 class HistoryVariable
 {
    public:
+   static int gHistoryPeriod;
    std::string fCategory;
    std::string fVarName;
    int64_t fLastUpdate; //Converted to UXIXTime

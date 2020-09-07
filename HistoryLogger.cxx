@@ -5,7 +5,8 @@
 // Monitor the last time we updated the ODB (only update at the periodicity specificed in GEMBANK)
 //--------------------------------------------------
 
-int gHistoryPeriod;
+
+int HistoryVariable::gHistoryPeriod;
 
 template<typename T>
 HistoryVariable::HistoryVariable(const GEMBANK<T>* GEM_bank, TMFE* mfe,TMFeEquipment* eq )

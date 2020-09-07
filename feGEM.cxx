@@ -6,8 +6,6 @@
 //
 #include "feGEM.h"
 
-extern int gHistoryPeriod; //Lets make this a static member
-
 //--------------------------------------------------
 // Base class for LabVIEW frontend
 // Child classes:
@@ -684,7 +682,7 @@ feGEMSupervisor::feGEMSupervisor(TMFE* mfe, TMFeEquipment* eq): feGEMClass(mfe,e
    fEventBuf  = NULL;
 
 
-   gHistoryPeriod = 10;
+   HistoryVariable::gHistoryPeriod = 10;
    //So far... limit to 1000 frontend workers...
    fPortRangeStart = 13000;
    fPortRangeStop  = 13999;
@@ -708,7 +706,7 @@ void feGEMSupervisor::Init()
    fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
    fEq->fOdbEqSettings->RI("port_range_start",&fPortRangeStart, true);
    fEq->fOdbEqSettings->RI("port_range_stop",&fPortRangeStop, true);
-   fEq->fOdbEqSettings->RI("DefaultHistoryPeriod",&gHistoryPeriod,true);
+   fEq->fOdbEqSettings->RI("DefaultHistoryPeriod",&HistoryVariable::gHistoryPeriod,true);
    assert(fPort>0);
    fOdbWorkers=fEq->fOdbEqSettings->Chdir("WorkerList",true);
    //fOdbWorkers->WS("HostName","",32);
