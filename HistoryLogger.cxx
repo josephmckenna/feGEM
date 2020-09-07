@@ -13,7 +13,7 @@ HistoryVariable::HistoryVariable(const GEMBANK<T>* GEM_bank, TMFE* mfe,TMFeEquip
 {
    fCategory=GEM_bank->GetCategoryName();
    fVarName=GEM_bank->GetVariableName();
-   if (GEM_bank->HistorySettings!=65535)
+   if (GEM_bank->HistoryPeriod!=65535)
       UpdateFrequency=GEM_bank->HistoryPeriod;
    else
       UpdateFrequency=gHistoryPeriod;
@@ -49,7 +49,7 @@ void HistoryVariable::Update(const GEMBANK<T>* GEM_bank)
       return;
    
    const GEMDATA<T>* data=GEM_bank->GetLastDataEntry();
-   //std::cout <<data->GetUnixTimestamp() <<" <  " <<fLastUpdate + UpdateFrequency <<std::endl;
+   //std::cout <<data->GetUnixTimestamp(GEM_bank->TimestampEndianness) <<" <  " <<fLastUpdate + UpdateFrequency <<std::endl;
    if (data->GetUnixTimestamp(GEM_bank->TimestampEndianness) < fLastUpdate + UpdateFrequency)
       return;
    fLastUpdate=data->GetUnixTimestamp(GEM_bank->TimestampEndianness);
