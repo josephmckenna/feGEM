@@ -86,6 +86,7 @@ public:
    void HandleBeginRun();
    void HandleEndRun();
    void HandleStrBank(GEMBANK<char>* bank,const char* hostname);
+   void HandleStrArrayBank(GEMBANK<char>* bank,const char* hostname);
    void HandleCommandBank(const GEMDATA<char>* bank,const char* command,const char* hostname);
    void LogBank(const char* buf,const char* hostname);
    int HandleBankArray(const char * ptr,const char* hostname);

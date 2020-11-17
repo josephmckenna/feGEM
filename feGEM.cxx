@@ -203,6 +203,49 @@ void feGEMClass::HandleCommandBank(const GEMDATA<char>* bank,const char* command
    return;
 }
 
+void feGEMClass::HandleStrArrayBank(GEMBANK<char>* bank,const char* hostname)
+{
+   if (strncmp(bank->NAME.VARCATEGORY,"CLIENT_INFO",14)==0)
+   {
+      std::vector<std::string> array;
+      
+      bool last_char_was_null = true;
+      uint32_t entries = bank->BlockSize - bank->DATA[0].GetHeaderSize();
+      
+      for (uint32_t i=0; i<entries; i++)
+      {
+         if (last_char_was_null && bank->DATA[0].DATA[i])
+         {
+            array.push_back(&(bank->DATA[0].DATA[i]));
+            last_char_was_null = false;
+         }
+         if (!bank->DATA[0].DATA[i])
+         {
+            last_char_was_null = true;
+         }
+      }
+      
+
+      
+      std::cout<<"Writing \"";
+      size_t max_len=0;
+      for (std::string line: array)
+      {
+         std::cout<<line.c_str()<<std::endl;
+         if (line.size() > max_len )
+            max_len=line.size();
+       }
+      std::cout<<"\" into "<<bank->NAME.VARNAME<< " in equipment settings"<<std::endl;
+      fEq->fOdbEqSettings->WSA(bank->NAME.VARNAME, array,max_len+1);
+      return;
+   }
+   else
+   {
+      std::cout<<"String array not understood!"<<std::endl;
+      bank->print();
+   }
+}
+
 void feGEMClass::HandleStrBank(GEMBANK<char>* bank,const char* hostname)
 {
    //bank->print();
@@ -317,7 +360,10 @@ void feGEMClass::LogBank(const char* buf, const char* hostname)
    } else if (strncmp(ThisBank->NAME.DATATYPE,"U8",2)==0) {
       GEMBANK<uint8_t>* bank=(GEMBANK<uint8_t>*)buf;
       logger.Update(bank);*/
-   
+   } else if (strncmp(ThisBank->NAME.DATATYPE,"STRA",4)==0) {
+      GEMBANK<char>* bank=(GEMBANK<char>*)buf;
+      HandleStrArrayBank(bank,hostname);
+      return;
    } else if (strncmp(ThisBank->NAME.DATATYPE,"STR",3)==0) {
       GEMBANK<char>* bank=(GEMBANK<char>*)buf;
       HandleStrBank(bank,hostname);
@@ -655,19 +701,23 @@ void feGEMWorker::Init(MVOdb* supervisor_settings_path)
    fEventBuf = (char*)malloc(fEventSize);
    char bind_port[100];
    sprintf(bind_port,"tcp://*:%d",fPort);
-   std::cout<<"Binding to: "<<bind_port<<std::endl;
-   //int rc=zmq_bind (responder, bind_port);
+   std::cout<<"Binding to2: "<<bind_port<<std::endl;
+   std::cout<<"..."<<std::endl;
    address.sin_family = AF_INET; 
+   std::cout<<"a"<<std::endl;
    address.sin_addr.s_addr = INADDR_ANY; 
+   std::cout<<"b"<<std::endl;
    address.sin_port = htons( fPort ); 
+   
+   std::cout<<"c"<<std::endl;
     // Forcefully attaching socket to the port fPort
    if (bind(server_fd, (struct sockaddr *)&address,  
                               sizeof(address))<0) 
    { 
-      //perror("bind failed"); 
+      std::cout<<"Failed to bind"<<std::endl; 
       exit(1); 
    }
-
+   std::cout<<"Bound"<<std::endl;
    //assert (rc==0);
    TCP_thread=std::thread(&feGEMClass::Run,this);
 }
@@ -729,7 +779,7 @@ void feGEMSupervisor::Init()
    if (bind(server_fd, (struct sockaddr *)&address,  
                               sizeof(address))<0) 
    { 
-      //perror("bind failed"); 
+      std::cout<<"Bind failed"<<std::endl;
       exit(1); 
    }  
    //assert (rc==0);

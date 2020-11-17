@@ -97,8 +97,11 @@ int main(int argc, char* argv[])
       feGEMSupervisor* myfe= new feGEMSupervisor(mfe,eq);
       myfe->fPort=port;
       mfe->RegisterRpcHandler(myfe);
+      std::cout<<"Initialise"<<std::endl;
       myfe->Init();
+      std::cout<<"Register periodic"<<std::endl;
       mfe->RegisterPeriodicHandler(eq, myfe);
+      std::cout<<"Register done"<<std::endl;
    }
    else
    {
@@ -114,7 +117,7 @@ int main(int argc, char* argv[])
    //mfe->DeregisterTransitionPause();
    //mfe->DeregisterTransitionResume();
 
-   eq->SetStatus("Started...", "white");
+   eq->SetStatus(name.c_str(), "green");
 
    while (!mfe->fShutdownRequested) {
       mfe->PollMidas(10);
