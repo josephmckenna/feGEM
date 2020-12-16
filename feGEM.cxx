@@ -702,14 +702,9 @@ void feGEMWorker::Init(MVOdb* supervisor_settings_path)
    char bind_port[100];
    sprintf(bind_port,"tcp://*:%d",fPort);
    std::cout<<"Binding to2: "<<bind_port<<std::endl;
-   std::cout<<"..."<<std::endl;
    address.sin_family = AF_INET; 
-   std::cout<<"a"<<std::endl;
    address.sin_addr.s_addr = INADDR_ANY; 
-   std::cout<<"b"<<std::endl;
    address.sin_port = htons( fPort ); 
-   
-   std::cout<<"c"<<std::endl;
     // Forcefully attaching socket to the port fPort
    if (bind(server_fd, (struct sockaddr *)&address,  
                               sizeof(address))<0) 
