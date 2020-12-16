@@ -29,6 +29,8 @@ HistoryVariable::HistoryVariable(const GEMBANK<T>* GEM_bank, TMFE* mfe,TMFeEquip
    else
    {
       OdbEq = mfe->fOdbRoot->Chdir((std::string("Equipment/") + fCategory).c_str(), true);
+      //fEq = new TMFeEquipment(mfe,fCategory.c_str(),eq->fCommon);
+      //fEq->Init();
    }
    fOdbEqVariables  = OdbEq->Chdir("Variables", true);
 }
@@ -42,6 +44,7 @@ bool HistoryVariable::IsMatch(const GEMBANK<T>* GEM_bank)
       return false;
    return true;
 }
+
 template<typename T>
 void HistoryVariable::Update(const GEMBANK<T>* GEM_bank)
 {
@@ -101,15 +104,38 @@ HistoryVariable* HistoryLogger::AddNewVariable(const GEMBANK<T>* GEM_bank)
                     GEM_bank->GetVariableName().c_str());
    fEq->fOdbEqSettings->WSAI("feVariables",fVariables.size(), VarAndCategory);
    fEq->fOdbEqSettings->WU32AI("DateAdded",(int)fVariables.size(), GEM_bank->GetFirstUnixTimestamp());
-   
+
+   HistoryVariable* variable = new HistoryVariable(GEM_bank,fMfe,fEq);
+
    //Push into list of monitored variables
-   fVariables.push_back(new HistoryVariable(GEM_bank,fMfe,fEq));
+   fVariables.push_back(variable);
+
    //Announce in control room new variable is logging
    char message[100];
-   sprintf(message,"New variable [%s] in category [%s] being logged (type %s)",GEM_bank->GetVariableName().c_str(),GEM_bank->GetCategoryName().c_str(), GEM_bank->GetType().c_str());
+   if (strncmp(GEM_bank->GetCategoryName().c_str(),"THISHOST",8)==0)
+   {
+      sprintf(
+         message,
+         "New variable [%s] from %s being logged (type %s)",
+         GEM_bank->GetVariableName().c_str(),
+         fEq->fName.c_str(), 
+         GEM_bank->GetType().c_str()
+         );
+   }
+   else
+   {
+      sprintf(
+         message,
+         "New variable [%s] in category [%s] being logged (type %s)",
+         GEM_bank->GetVariableName().c_str(),
+         GEM_bank->GetCategoryName().c_str(),
+         GEM_bank->GetType().c_str()
+         );
+   }
    fMfe->Msg(MTALK, fEq->fName.c_str(), message);
+
    //Return pointer to this variable so the history can be updated by caller function
-   return fVariables.back();
+   return variable;
 }
 
 template<typename T>

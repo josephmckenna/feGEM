@@ -16,6 +16,7 @@ class HistoryVariable
    int64_t fLastUpdate; //Converted to UXIXTime
    int UpdateFrequency;
    MVOdb* fOdbEqVariables; 
+   //TMFeEquipment* fEq;
    template<typename T>
    HistoryVariable(const GEMBANK<T>* gembank, TMFE* mfe,TMFeEquipment* eq );
    template<typename T>
