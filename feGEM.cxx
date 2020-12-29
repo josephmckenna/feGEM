@@ -37,7 +37,7 @@ void feGEMClass::HandleEndRun()
    fMfe->fOdbRoot->RI("Runinfo/Run number", &RUNNO);
    fMfe->fOdbRoot->RU32("Runinfo/Start Time binary", &RUN_START_T);
    fMfe->fOdbRoot->RU32("Runinfo/Stop Time binary", &RUN_STOP_T);
-   fEq->SetStatus("Stopped", "#00FF00");
+   //fEq->SetStatus("Stopped", "#00FF00");
    RunStatus=Stopped;
 }
 
@@ -192,6 +192,9 @@ void feGEMClass::HandleCommandBank(const GEMDATA<char>* bank,const char* command
       }
       fEq->fOdbEqSettings->WI("event_size", fEventSize);
       std::cout<<"Event size updated to:"<<fEventSize<<std::endl;
+
+      std::string status = "Rate limit set: " + std::to_string(fEventSize/1000) + "kpbs";
+      fEq->SetStatus(status.c_str(), "green");
       return;
    }
 
@@ -637,6 +640,8 @@ feGEMWorker::feGEMWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts, int 
    //Default event size ok 10kb, will be overwritten by ODB entry in Init()
    fEventSize = 10000;
    fEventBuf  = NULL;
+   std::string status = "Default Rate limit: " + std::to_string(fEventSize/1000) + "kpbs";
+   fEq->SetStatus(status.c_str(), "green");
 
    // Creating socket file descriptor 
    server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -691,6 +696,9 @@ void feGEMWorker::Init(MVOdb* supervisor_settings_path)
    SettingsDataBase=new SettingsFileDatabase(SettingsFileDatabasePath.c_str());
 
    fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
+   std::string status = "Rate limit: " + std::to_string(fEventSize/1000) + "kpbs";
+   fEq->SetStatus(status.c_str(), "green");
+
    lastEventSize=fEventSize;
    fEq->fOdbEqSettings->WS("feVariables","No variables logged yet...",32);
    fEq->fOdbEqSettings->WU32("DateAdded",0);
@@ -849,7 +857,7 @@ const char* feGEMSupervisor::AddNewClient(const char* hostname)
       common->LogHistory = 1;
       TMFeEquipment* worker_eq = new TMFeEquipment(mfe, name.c_str(), common);
       worker_eq->Init();
-      worker_eq->SetStatus("Starting...", "white");
+      //worker_eq->SetStatus("Starting...", "white");
       worker_eq->ZeroStatistics();
       worker_eq->WriteStatistics();
       mfe->RegisterEquipment(worker_eq);
@@ -861,8 +869,6 @@ const char* feGEMSupervisor::AddNewClient(const char* hostname)
       //mfe->StartRpcThread();
       //mfe->StartPeriodicThread();
       //mfe->StartPeriodicThreads();
-      
-      worker_eq->SetStatus("Started", "white");
       return "New Frontend started";
    }
    return "Frontend already running";
