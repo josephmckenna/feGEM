@@ -129,6 +129,13 @@ class GEMBANK {
    void ClearHeader();
 
    const GEMDATA<T>* GetFirstDataEntry() const { return &DATA[0]; }
+   
+   uint32_t GetSizeOfDataArray() const
+   {
+     return GetFirstDataEntry()->GetEntries(BlockSize);
+   }
+   
+   
    const GEMDATA<T>* GetDataEntry(uint32_t i) const
    {
       char* ptr=(char*)&DATA;

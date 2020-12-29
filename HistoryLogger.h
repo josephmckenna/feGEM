@@ -17,12 +17,10 @@ class HistoryVariable
    int UpdateFrequency;
    MVOdb* fOdbEqVariables; 
    //TMFeEquipment* fEq;
-   template<typename T>
-   HistoryVariable(const GEMBANK<T>* gembank, TMFE* mfe,TMFeEquipment* eq );
-   template<typename T>
-   bool IsMatch(const GEMBANK<T>* gembank);
-   template<typename T>
-   void Update(const GEMBANK<T>* gembank);
+   template<typename T> HistoryVariable(const GEMBANK<T>* gembank, TMFE* mfe,TMFeEquipment* eq );
+   template<typename T> void BuildCPUMEMHistoryPlot(const GEMBANK<T>* GEM_bank, TMFE* mfe,TMFeEquipment* eq );
+   template<typename T> bool IsMatch(const GEMBANK<T>* gembank);
+   template<typename T> void Update(const GEMBANK<T>* gembank);
    private:
    void WriteODB(std::vector<bool>& data)
    {

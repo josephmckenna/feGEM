@@ -8,6 +8,78 @@
 
 int HistoryVariable::gHistoryPeriod;
 
+template<typename T> 
+void HistoryVariable::BuildCPUMEMHistoryPlot(const GEMBANK<T>* GEM_bank, TMFE* mfe,TMFeEquipment* eq )
+{
+   std::cout<<"Building history entry for "<<eq->fName<<std::endl;
+   assert(strncmp(GEM_bank->GetCategoryName().c_str(),"THISHOST",8)==0);
+   assert(strncmp(GEM_bank->GetVariableName().c_str(),"CPUMEM",6)==0);
+   //Insert myself into the history
+   int size;
+   int NVARS=GEM_bank->GetSizeOfDataArray();
+   
+   /////////////////////////////////////////////////////
+   // Setup variables to plot:
+   /////////////////////////////////////////////////////
+   mfe->fOdbRoot->Chdir("History/Display/feGEM",true);
+   MVOdb* OdbPlot = mfe->fOdbRoot->Chdir((std::string("History/Display/feGEM/") + eq->fName).c_str(), true);
+   size = 64; // String length in ODB
+   {
+      std::vector<std::string> Variables;
+      for (int i = 0; i < NVARS; i++)
+      {
+         Variables.push_back(
+            eq->fName + "/CPUMEM:CPUMEM[" + std::to_string(i) + "]"
+         );
+      }
+      OdbPlot->WSA("Variables",Variables,size);
+   }
+
+   /////////////////////////////////////////////////////
+   // Setup labels 
+   /////////////////////////////////////////////////////
+   std::vector<std::string> Labels;
+   size = 32;
+   {
+      if (NVARS > 2)
+      {
+         for (int i = 0; i < NVARS - 1; i++)
+         {
+            Labels.push_back( std::string("CPU ") + std::to_string(i+1) + std::string(" Load (%)"));
+         }
+         Labels.push_back("Memory Usage (%)");
+      }
+      else
+      {
+         Labels.push_back("All CPU Load (%)");
+         Labels.push_back("Memory Usage (%)");
+      }
+      OdbPlot->WSA("Label",Labels,size);
+   }
+/*
+   /////////////////////////////////////////////////////
+   // Setup colours:
+   /////////////////////////////////////////////////////
+   size = 32;
+   sprintf(path,"/History/Display/feGEM/%s/Colour",eq->fName.c_str());
+   {
+      char vars[size*NVARS];
+      memset(vars, 0, size*NVARS);
+      for (int i=0; i<NVARS; i++)
+         sprintf(vars+size*i,"%s",(colours[i%16]).c_str());
+      status = db_set_value(hDB, 0, path,  vars, size*NVARS, NVARS, TID_STRING);
+   }
+   assert(status == DB_SUCCESS);
+*/
+   /////////////////////////////////////////////////////
+   // Setup time scale and range:
+   /////////////////////////////////////////////////////
+   OdbPlot->WS("Timescale","1h");
+   
+   OdbPlot->WF("Minimum",0.);
+   OdbPlot->WF("Maximum",100.);
+}
+
 template<typename T>
 HistoryVariable::HistoryVariable(const GEMBANK<T>* GEM_bank, TMFE* mfe,TMFeEquipment* eq )
 {
@@ -24,7 +96,14 @@ HistoryVariable::HistoryVariable(const GEMBANK<T>* GEM_bank, TMFE* mfe,TMFeEquip
    MVOdb* OdbEq = NULL;
    if (strncmp(GEM_bank->GetCategoryName().c_str(),"THISHOST",8)==0)
    {
+      std::cout<<"Build THISHOST"<<std::endl;
       OdbEq = mfe->fOdbRoot->Chdir((std::string("Equipment/") + eq->fName).c_str(), true);
+      if (strncmp(GEM_bank->GetVariableName().c_str(),"CPUMEM",6)==0)
+      {
+         std::cout<<"Build CPUMEM"<<std::endl;
+         BuildCPUMEMHistoryPlot(GEM_bank, mfe,eq );
+      }
+      
    }
    else
    {
