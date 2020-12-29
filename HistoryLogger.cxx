@@ -56,21 +56,24 @@ void HistoryVariable::BuildCPUMEMHistoryPlot(const GEMBANK<T>* GEM_bank, TMFE* m
       }
       OdbPlot->WSA("Label",Labels,size);
    }
-/*
+
    /////////////////////////////////////////////////////
    // Setup colours:
    /////////////////////////////////////////////////////
    size = 32;
-   sprintf(path,"/History/Display/feGEM/%s/Colour",eq->fName.c_str());
    {
-      char vars[size*NVARS];
-      memset(vars, 0, size*NVARS);
+      const char *colourList[] = {
+           "#00AAFF", "#FF9000", "#FF00A0", "#00C030",
+           "#A0C0D0", "#D0A060", "#C04010", "#807060",
+           "#F0C000", "#2090A0", "#D040D0", "#90B000",
+           "#B0B040", "#B0B0FF", "#FFA0A0", "#A0FFA0",
+           "#808080"};
+      std::vector<std::string> colours;
       for (int i=0; i<NVARS; i++)
-         sprintf(vars+size*i,"%s",(colours[i%16]).c_str());
-      status = db_set_value(hDB, 0, path,  vars, size*NVARS, NVARS, TID_STRING);
+         colours.push_back(std::string(colourList[i%16]));
+      OdbPlot->WSA("Colour",colours,size);
    }
-   assert(status == DB_SUCCESS);
-*/
+
    /////////////////////////////////////////////////////
    // Setup time scale and range:
    /////////////////////////////////////////////////////
