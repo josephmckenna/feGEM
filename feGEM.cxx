@@ -764,7 +764,8 @@ void feGEMSupervisor::Init()
    assert(fPort>0);
    fOdbWorkers=fEq->fOdbEqSettings->Chdir("WorkerList",true);
    //fOdbWorkers->WS("HostName","",32);
-   fOdbWorkers->RU32A("DateAdded", NULL, true, 1);
+   std::vector<uint32_t> DataAdded;
+   fOdbWorkers->RU32A("DateAdded", &DataAdded, true, 1);
    //fOdbWorkers->RU16A("Port", NULL, true, 1);
    //fOdbWorkers->WU32("DateAdded",0);
    //fOdbWorkers->WU32("Port",0);
