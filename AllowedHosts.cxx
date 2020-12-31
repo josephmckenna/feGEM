@@ -37,17 +37,40 @@ AllowedHosts::AllowedHosts(TMFE* mfe): cool_down_time(1000), retry_limit(10)
    allow_self_registration=false;
    fOdbEqSettings->RB("allow_self_registration",&allow_self_registration,true);
    std::vector<std::string> list;
+   //Add example first entry
    list.push_back("local_host");
    fOdbEqSettings->RSA("allowed_hosts", &list,true,10,64);
    //Copy list of good hostnames into array of Host objects
    for (auto host: list)
-      allowed_hosts.push_back(Host(host.c_str()));
-   list.clear();
+   {
+      if (host.size())
+      {
+         allowed_hosts.push_back(Host(host.c_str()));
+      }
+   }
+   //Check if there enough blank spaces for 10 more hosts (autogrow)
+   if (list.size() < allowed_hosts.size() + 10)
+   {
+      fOdbEqSettings->WSAI("allowed_hosts",allowed_hosts.size() + 10,"");
+   }
+   list.clear(); //Reuse list vector
+
+   //Add example first entry
    list.push_back("bad_host_name");
    fOdbEqSettings->RSA("banned_hosts", &list,true,10,64);
    //Copy bad of good hostnames into array of Host objects
    for (auto host: list)
-      banned_hosts.push_back(Host(host.c_str()));
+   {
+      if (host.size())
+      {
+         banned_hosts.push_back(Host(host.c_str()));
+      }
+   }
+   //Check if there enough blank spaces for 10 more hosts (autogrow)
+   if (list.size() < banned_hosts.size() + 10)
+   {
+     fOdbEqSettings->WSAI("banned_hosts",banned_hosts.size() + 10,"");
+   }
 }
 
 void AllowedHosts::PrintRejection(TMFE* mfe,const char* hostname)
