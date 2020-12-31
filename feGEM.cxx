@@ -40,7 +40,7 @@ void feGEMClass::HandleEndRun()
    //fEq->SetStatus("Stopped", "#00FF00");
    RunStatus=Stopped;
 }
-void feGEMClass::SetRateStatus()
+void feGEMClass::SetFEStatus()
 {
    std::string status = "Rate limit set: " + std::to_string(fEventSize/1000) + "KiB/s";
    fEq->SetStatus(status.c_str(), "greenLight");
@@ -197,7 +197,7 @@ void feGEMClass::HandleCommandBank(const GEMDATA<char>* bank,const char* command
       }
       fEq->fOdbEqSettings->WI("event_size", fEventSize);
       std::cout<<"Event size updated to:"<<fEventSize<<std::endl;
-      SetRateStatus();
+      SetFEStatus();
       return;
    }
 
@@ -643,7 +643,7 @@ feGEMWorker::feGEMWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts, int 
    //Default event size ok 10kb, will be overwritten by ODB entry in Init()
    fEventSize = 10000;
    fEventBuf  = NULL;
-   SetRateStatus();
+   SetFEStatus();
 
    // Creating socket file descriptor 
    server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -698,7 +698,7 @@ void feGEMWorker::Init(MVOdb* supervisor_settings_path)
    SettingsDataBase=new SettingsFileDatabase(SettingsFileDatabasePath.c_str());
 
    fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
-   SetRateStatus();
+   SetFEStatus();
 
    lastEventSize=fEventSize;
    fEq->fOdbEqSettings->WS("feVariables","No variables logged yet...",32);
@@ -870,6 +870,7 @@ const char* feGEMSupervisor::AddNewClient(const char* hostname)
       //mfe->StartRpcThread();
       //mfe->StartPeriodicThread();
       //mfe->StartPeriodicThreads();
+      SetFEStatus();
       return "New Frontend started";
    }
    return "Frontend already running";

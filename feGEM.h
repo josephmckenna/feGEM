@@ -92,7 +92,7 @@ public:
    int HandleBankArray(const char * ptr,const char* hostname);
    int HandleBank(const char * ptr,const char* hostname);
 
-   void SetRateStatus();
+   void SetFEStatus();
 
    void HandlePeriodic() {};
    void ServeHost();
@@ -142,5 +142,16 @@ public:
    virtual int FindHostInWorkerList(const char* hostname);
    virtual uint16_t AssignPortForWorker(uint workerID);
    virtual const char* AddNewClient(const char* hostname);
-  
+   
+   virtual void SetFEStatus()
+   {
+      size_t threads = RunningWorkers.size();
+      std::string status = 
+         "" + fMfe->fFrontendName + "@" + fMfe->fFrontendHostname +
+         " [" + std::to_string(threads) + " thread";
+      if (threads > 1)
+         status += "s";
+      status += "]";
+      fEq->SetStatus(status.c_str(), "greenLight");
+  }
 };
