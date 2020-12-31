@@ -92,6 +92,8 @@ public:
    int HandleBankArray(const char * ptr,const char* hostname);
    int HandleBank(const char * ptr,const char* hostname);
 
+   void SetRateStatus();
+
    void HandlePeriodic() {};
    void ServeHost();
    void Run();

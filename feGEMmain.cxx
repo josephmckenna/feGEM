@@ -86,7 +86,7 @@ int main(int argc, char* argv[])
    if (max_event_size!=0)
       eq->fOdbEqSettings->WI("event_size", max_event_size);
    eq->fOdbEqSettings->RI("supervisor_port", &port, true);
-   eq->SetStatus("Starting...", "white");
+   //eq->SetStatus("Starting...", "white");
    eq->ZeroStatistics();
    eq->WriteStatistics();
 
@@ -117,7 +117,7 @@ int main(int argc, char* argv[])
    //mfe->DeregisterTransitionPause();
    //mfe->DeregisterTransitionResume();
 
-   eq->SetStatus(name.c_str(), "green");
+   //eq->SetStatus(name.c_str(), "greenLight");
 
    while (!mfe->fShutdownRequested) {
       mfe->PollMidas(10);
