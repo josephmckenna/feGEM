@@ -27,7 +27,7 @@ void feGEMClass::HandleBeginRun()
    fMfe->fOdbRoot->RU32("Runinfo/Start Time binary", &RUN_START_T);
    //Stop time gets reset to 0 (1/1/1970) at start run
    //fMfe->fOdbRoot->RU32("Runinfo/Stop Time binary", &RUN_STOP_T);
-   fEq->SetStatus("Running", "#00FF00");
+   //fEq->SetStatus("Running", "#00FF00");
    RunStatus=Running;
 }
 
@@ -384,6 +384,7 @@ void feGEMClass::LogBank(const char* buf, const char* hostname)
 
 int feGEMClass::HandleBankArray(const char * ptr,const char* hostname)
 {
+   int NGEMBanks = 0;
    GEMBANKARRAY* array=(GEMBANKARRAY*)ptr;
    if (array->GetTotalSize() > (uint32_t)fEventSize)
    {
@@ -400,10 +401,10 @@ int feGEMClass::HandleBankArray(const char * ptr,const char* hostname)
    for (uint32_t i=0; i<array->NumberOfEntries; i++)
    {
       GEMBANK<double>* bank=(GEMBANK<double>*)buf;
-      HandleBank(buf, hostname);
+      NGEMBanks += HandleBank(buf, hostname);
       buf+=bank->GetHeaderSize()+bank->BlockSize*bank->NumberOfEntries;
    }
-   return array->NumberOfEntries;
+   return NGEMBanks;
 }
 
 int feGEMClass::HandleBank(const char * ptr,const char* hostname)
@@ -422,7 +423,7 @@ int feGEMClass::HandleBank(const char * ptr,const char* hostname)
       return -1;
    }
    LogBank(ptr,hostname);
-   return 1;
+   return ThisBank->NumberOfEntries;
 }
 void feGEMClass::Run()
 {
@@ -609,6 +610,7 @@ void feGEMClass::ServeHost()
    std::chrono::duration<double, std::milli> handlingtime=timer_stop - timer_start;
    //std::cout<<"["<<fEq->fName.c_str()<<"] Handling time: "<<handlingtime.count()*1000 <<"ms"<<std::endl;
    printf ("[%s] Handled %c%c%c%c %d banks (%d bytes) in %fms",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],nbanks,read_status,handlingtime.count());
+   periodicity.AddBanksProcessed(nbanks);
    if (fDebugMode)
       printf(" (debug mode on)");
    printf("\n");

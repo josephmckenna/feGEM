@@ -12,6 +12,10 @@ PeriodicityManager::PeriodicityManager(TMFE* mfe,TMFeEquipment* eq)
    fPeriod=500;
    fEq=eq;
    fMfe=mfe;
+
+   fGEMStatLastTime=0;
+   fGEMBankEvents=0;
+
    fNumberOfConnections=0;
    fPeriodicWithData=0;
    fPeriodicWithoutData=0;
@@ -50,6 +54,7 @@ void PeriodicityManager::AddRemoteCaller(char* prog)
 
 void PeriodicityManager::LogPeriodicWithData()
 {
+   WriteGEMBankStatistics();
    fPeriodicWithData++;
    // Every 1000 events, check that we are have more polls that data being sent 
    // (UpdatePerodicity should keep this up to date)
@@ -79,14 +84,33 @@ void PeriodicityManager::LogPeriodicWithData()
    }
    fOdbStatistics->WI("Periodicicity",fPeriod);
    fOdbStatistics->WI("Connections",fNumberOfConnections);
-
    fOdbStatistics->WI("PeriodicsWithData",fPeriodicWithData);
    fOdbStatistics->WI("SparePeriodics",fPeriodicWithoutData);
 }
 
+
 void PeriodicityManager::LogPeriodicWithoutData()
 {
    fPeriodicWithoutData++;
+}
+
+void PeriodicityManager::AddBanksProcessed(int nbanks)
+{
+   fGEMBankEvents += nbanks;
+}
+
+void PeriodicityManager::WriteGEMBankStatistics()
+{
+   double now = TMFE::GetTime();
+   double elapsed = now - fGEMStatLastTime;
+   
+   if (elapsed > 10. || fGEMStatLastTime == 0) {
+      fGEMStatLastTime = now;
+      double GEMBankRate = (double) fGEMBankEvents / elapsed;
+      fOdbStatistics->WD("GEM Banks per sec.",GEMBankRate);
+      fGEMBankEvents = 0;
+   }
+   return;
 }
 
 void PeriodicityManager::UpdatePerodicity()
