@@ -54,6 +54,12 @@ class LVTimestamp {
    }
 };
 
+//--------------------------------------------------
+// GEMDATA object
+// A class to contain the raw data we want to log
+// Contents: I have a timestamp and an array
+//--------------------------------------------------
+
 //Data as transmitted
 template<typename T>
 class GEMDATA {
@@ -61,7 +67,42 @@ class GEMDATA {
    //LabVIEW formatted time... (128bit)
    LVTimestamp timestamp;
    T DATA[];
-   void print(uint32_t size, uint16_t TimestampEndianness, uint16_t DataEndianness, bool IsString) const;
+   void print(uint32_t size, uint16_t TimestampEndianness, uint16_t DataEndianness, bool IsString) const
+   {
+      std::cout<<"   Coarse Time:"<<GetLabVIEWCoarseTime(TimestampEndianness)<<std::endl;
+      std::cout<<"   Unix Time:"<<GetUnixTimestamp(TimestampEndianness)<<std::endl;;
+      std::cout<<"   Fine Time:"<<GetLabVIEWFineTime(TimestampEndianness)<<std::endl;
+      uint32_t data_points=GetEntries(size);
+      std::cout<<"   size:"<<data_points<<std::endl;
+      if (IsString)
+      {
+         std::cout<<"DATA:";
+         for (int i=0; i<data_points; i++)
+         {
+            if (DATA[i])
+               std::cout<<DATA[i];
+            else
+               std::cout<<"NULL";
+         }
+         std::cout<<std::endl;
+         return;
+      }
+      if (DataEndianness != LittleEndian)
+      {
+         for (int i=0; i<data_points; i++)
+            std::cout<<"   DATA["<<i<<"]="<<change_endian(DATA[i])<<std::endl;
+      }
+      else
+      {
+         for (int i=0; i<data_points; i++)
+         {
+            if (DATA[i])
+               std::cout<<"   DATA["<<i<<"]="<<DATA[i]<<std::endl;
+            else
+               std::cout<<"   DATA["<<i<<"]="<<"NULL"<<std::endl;         
+         }
+      }
+   }
    operator T*() { return &DATA[0]; }
    uint32_t GetHeaderSize() const            { return sizeof(timestamp); }
    uint32_t GetEntries(uint32_t size) const  { return (size-GetHeaderSize())/sizeof(T);      }
@@ -98,13 +139,60 @@ class BANK_TITLE {
    char VARCATEGORY[16]={0};
    char VARNAME[16]={0};
    char EquipmentType[32]={0};
-   void print() const;
-   std::string SanitiseBankString(const char* input, int assert_size=0) const;
+   void print() const
+   {
+      printf("  BANK:%.4s\n",BANK);
+      printf("  DATATYPE:%.4s\n",DATATYPE);
+      printf("  Variable:%.16s/%.16s\n",GetCategoryName().c_str(),GetVariableName().c_str());
+      printf("  EquipmentType:%.32s\n",GetEquipmentType().c_str());
+   }
+   std::string SanitiseBankString(const char* input, int assert_size=0) const
+   {
+      //std::cout<<input;
+      const int input_size=strlen(input);
+      int output_size=input_size;
+      if (assert_size)
+         output_size=assert_size;
+      std::string output;
+      output.resize(output_size);
+
+      int i,j;
+      for (i = 0, j = 0; i<input_size; i++,j++)
+      {
+         if (isalnum(input[i]) || input[i]=='_' || input[i]=='-')
+         {
+            output[j]=input[i];
+         }
+         else
+            j--;
+         if (j>=output_size)
+            break;
+      }
+      output[j]=0;
+      if (assert_size)
+         output[assert_size]=0;
+      //std::cout<<"\t\t"<<output.c_str()<<std::endl;
+      return output;
+   }  
+
+
    std::string GetType() const          { return SanitiseBankString(DATATYPE,4);                          }
    std::string GetCategoryName() const  { return SanitiseBankString(VARCATEGORY,sizeof(VARCATEGORY));     }
    std::string GetVariableName() const  { return SanitiseBankString(VARNAME,sizeof(VARNAME));             }
    std::string GetEquipmentType() const { return SanitiseBankString(EquipmentType,sizeof(EquipmentType)); }
+   
 };
+static_assert(sizeof(BANK_TITLE)==72);
+
+//--------------------------------------------------
+// GEMBANK object
+// A class to contain a bundle of GEMDATA objects
+// Contents:
+//    Variable, Category and Equipment names
+//    The rate to log to history
+//    The endianess of the GEMDATA data
+//    Size
+//--------------------------------------------------
 
 template<typename T>
 class GEMBANK {
@@ -118,15 +206,68 @@ class GEMBANK {
    uint32_t NumberOfEntries;
    GEMDATA<T> DATA[];
 
-   void printheader() const;
-   void print() const;
+   void printheader() const
+   {
+      NAME.print();
+      std::cout<<"  HistorySettings:"<<HistorySettings<<std::endl;
+      std::cout<<"  HistoryPeriod:"<<HistoryPeriod<<std::endl;
+      std::cout<<"  TimestampEndianess"<<TimestampEndianness<<std::endl;
+      std::cout<<"  DataEndianess:"<<DataEndianness<<std::endl;
+      std::cout<<"  BlockSize:"<<BlockSize<<std::endl;
+      std::cout<<"  NumberOfEntries:"<<NumberOfEntries<<std::endl;
+   }
+
+   void print() const
+   {
+      printheader();
+      bool IsString=false;
+      if (strncmp(NAME.DATATYPE,"STR",3)==0)
+         IsString=true;
+      for (int i=0; i<NumberOfEntries; i++)
+      {
+         char* buf=(char*)&DATA;
+         GEMDATA<T>* data=(GEMDATA<T>*)buf;
+         data->print(BlockSize, TimestampEndianness,DataEndianness,IsString);
+         buf+=BlockSize;
+      }
+   }
+
+
    std::string GetType() const          { return NAME.GetType();          }
    std::string GetCategoryName() const  { return NAME.GetCategoryName();  }
    std::string GetVariableName() const  { return NAME.GetVariableName();  }
    std::string GetEquipmentType() const { return NAME.GetEquipmentType(); }
-   uint32_t GetHeaderSize();
-   uint32_t GetTotalSize(); //Size including header
-   void ClearHeader();
+   uint32_t GetHeaderSize()
+   {
+      return sizeof(NAME)
+         + sizeof(HistorySettings)
+         + sizeof(HistoryPeriod)
+         + sizeof(TimestampEndianness)
+         + sizeof(DataEndianness)
+         + sizeof(BlockSize)
+         + sizeof(NumberOfEntries);
+   }
+
+   uint32_t GetTotalSize() //Size including header
+   {
+      return GetHeaderSize()+BlockSize*NumberOfEntries;
+   }
+
+   void ClearHeader()
+   {
+      //Char arrays are NULL terminated... so NULL the first character
+      NAME.BANK[0]=0;
+      NAME.DATATYPE[0]=0;
+      NAME.VARCATEGORY[0]=0;
+      NAME.VARNAME[0]=0;
+      NAME.EquipmentType[0]=0;
+      HistorySettings=0;
+      HistoryPeriod=0;
+      TimestampEndianness=-1;
+      DataEndianness=-1;
+      BlockSize=-1;
+      NumberOfEntries=-1;
+   }
 
    const GEMDATA<T>* GetFirstDataEntry() const { return &DATA[0]; }
    
@@ -148,6 +289,43 @@ class GEMBANK {
    const int64_t GetLastUnixTimestamp() const  { return GetLastDataEntry()->GetUnixTimestamp(TimestampEndianness);  }
 };
 
+//Call the correct print based on type
+void PrintGEMBANK(GEMBANK<void*>* bank)
+{
+   if (strncmp(bank->NAME.DATATYPE,"DBL",3)==0) 
+      ((GEMBANK<double>*)bank)->print();
+   else if (strncmp(bank->NAME.DATATYPE,"FLT",3)==0)
+      ((GEMBANK<float>*)bank)->print();
+   else if (strncmp(bank->NAME.DATATYPE,"BOOL",4)==0)
+      ((GEMBANK<bool>*)bank)->print();
+   else if (strncmp(bank->NAME.DATATYPE,"I32",3)==0)
+      ((GEMBANK<int32_t>*)bank)->print();
+   else if (strncmp(bank->NAME.DATATYPE,"U32",4)==0)
+      ((GEMBANK<uint32_t>*)bank)->print();
+   else if (strncmp(bank->NAME.DATATYPE,"U16",3)==0)
+      ((GEMBANK<uint16_t>*)bank)->print();
+   else if (strncmp(bank->NAME.DATATYPE,"STRA",4)==0)
+   {
+      std::cout<<"Printing of string array probably wobbly"<<std::endl;
+      ((GEMBANK<char>*)bank)->print();
+   }
+   else if (strncmp(bank->NAME.DATATYPE,"STR",3)==0) 
+      ((GEMBANK<char>*)bank)->print();
+   else
+   {
+      std::cout<<"Unknown bank data type... "<<std::endl;
+      bank->print();
+   }
+}
+//--------------------------------------------------
+// GEMBANKARRAY object
+// A simple contaner to hold an array of GEMBANKs
+// Contents:
+//    BANK array ID number
+//    Array of GEMBANKs
+//    Size
+//--------------------------------------------------
+
 class GEMBANKARRAY {
    public:
    char BANK[4];
@@ -165,8 +343,24 @@ class GEMBANKARRAY {
    {
       return GetHeaderSize()+BlockSize;
    }
-   void ClearHeader();
-   void print();
+   void ClearHeader()
+   {
+      for (int i=0; i<4; i++)
+         BANK[i]=0;
+      BankArrayID=-1;
+      BlockSize=-1;
+      NumberOfEntries=-1;
+   }
+   void print()
+   {
+      printf("-------------------------\n");
+      printf("BANK:%.4s\n",BANK);
+      printf("BankArrayID:%u\n",BankArrayID);
+      printf("BlockSize:%u\n",BlockSize);
+      printf("NumberOfEntries:%u\n",NumberOfEntries);
+      printf("-------------------------\n");
+   }
 };
+
 
 #endif
