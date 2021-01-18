@@ -844,12 +844,12 @@ const char* feGEMSupervisor::AddNewClient(const char* hostname)
       std::string name = "feGEM_";
       name+=hostname;
       TMFE* mfe=fMfe;
-      if (name.size()>31)
+      if (name.size()>(31 - 4))
       {
          mfe->Msg(MERROR, name.c_str(), "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
          std::string tmp=name;
          name.clear();
-         for (int i=0; i<31; i++)
+         for (int i=0; i<(31 - 4); i++)
          {
             name+=tmp[i];
          }
