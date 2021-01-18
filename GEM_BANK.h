@@ -182,7 +182,7 @@ class BANK_TITLE {
    std::string GetEquipmentType() const { return SanitiseBankString(EquipmentType,sizeof(EquipmentType)); }
    
 };
-static_assert(sizeof(BANK_TITLE)==72);
+static_assert(sizeof(BANK_TITLE)==72,"ERROR IN BANK TITLE SIZE");
 
 //--------------------------------------------------
 // GEMBANK object
@@ -290,33 +290,8 @@ class GEMBANK {
 };
 
 //Call the correct print based on type
-void PrintGEMBANK(GEMBANK<void*>* bank)
-{
-   if (strncmp(bank->NAME.DATATYPE,"DBL",3)==0) 
-      ((GEMBANK<double>*)bank)->print();
-   else if (strncmp(bank->NAME.DATATYPE,"FLT",3)==0)
-      ((GEMBANK<float>*)bank)->print();
-   else if (strncmp(bank->NAME.DATATYPE,"BOOL",4)==0)
-      ((GEMBANK<bool>*)bank)->print();
-   else if (strncmp(bank->NAME.DATATYPE,"I32",3)==0)
-      ((GEMBANK<int32_t>*)bank)->print();
-   else if (strncmp(bank->NAME.DATATYPE,"U32",4)==0)
-      ((GEMBANK<uint32_t>*)bank)->print();
-   else if (strncmp(bank->NAME.DATATYPE,"U16",3)==0)
-      ((GEMBANK<uint16_t>*)bank)->print();
-   else if (strncmp(bank->NAME.DATATYPE,"STRA",4)==0)
-   {
-      std::cout<<"Printing of string array probably wobbly"<<std::endl;
-      ((GEMBANK<char>*)bank)->print();
-   }
-   else if (strncmp(bank->NAME.DATATYPE,"STR",3)==0) 
-      ((GEMBANK<char>*)bank)->print();
-   else
-   {
-      std::cout<<"Unknown bank data type... "<<std::endl;
-      bank->print();
-   }
-}
+void PrintGEMBANK(GEMBANK<void*>* bank);
+
 //--------------------------------------------------
 // GEMBANKARRAY object
 // A simple contaner to hold an array of GEMBANKs
