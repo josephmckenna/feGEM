@@ -52,6 +52,7 @@ class feGEMModuleWriter
             //gemdata->print(BlockSize, TimestampEndianness,DataEndianness,IsString);
             t->Fill();
          }
+         delete data;
       }
       template<typename T>
       std::pair<TTree*,TBranch*> FindOrCreateTree(TARunInfo* runinfo, GEMBANK<T>* bank, const std::string& CombinedName)
@@ -84,7 +85,7 @@ class feGEMModuleWriter
 
       void SaveToTree(TARunInfo* runinfo, GEMBANK<void*>* bank, uint32_t MIDAS_TIME)
       {
-         std::string CombinedName = bank->GetCategoryName() + "_" +bank->GetVariableName();
+         std::string CombinedName = bank->GetCategoryName() + "/" +bank->GetVariableName();
          #ifdef HAVE_CXX11_THREADS
          std::lock_guard<std::mutex> lock(TAMultithreadHelper::gfLock);
          #endif

@@ -4,7 +4,8 @@
 #include "GEM_BANK.h"
 //ROOT headers:
 #include "TObject.h"
-
+//std lib
+#include "assert.h"
 class TStoreGEMEventHeader: public TObject
 {
     private:
@@ -51,6 +52,7 @@ class TStoreGEMData: public TObject
 {
     private:
        TLVTimestamp RawLabVIEWtimestamp;
+       double RawLabVIEWAsUNIXTime;
        uint16_t TimestampEndianness;
        uint16_t DataEndianness;
        uint32_t MIDASTime;
@@ -61,7 +63,7 @@ class TStoreGEMData: public TObject
     void Set(const GEMDATA<T>* gemdata,const int BlockSize,
        const uint16_t _TimestampEndianness, const uint16_t _DataEndianness,
        const uint32_t _MIDASTime, const double _RunTime);
-
+    double GetLVTimestamp() const { return RawLabVIEWAsUNIXTime; }
     virtual ~TStoreGEMData();
     ClassDef(TStoreGEMData<T>,1);
 };

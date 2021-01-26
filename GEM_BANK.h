@@ -167,7 +167,7 @@ class BANK_TITLE {
       //std::cout<<input;
       const int input_size=strlen(input);
       int output_size=input_size;
-      if (assert_size)
+      if (assert_size && assert_size < input_size)
          output_size=assert_size;
       std::string output;
       output.resize(output_size);
@@ -187,7 +187,7 @@ class BANK_TITLE {
       output[j]=0;
       if (assert_size)
          output[assert_size]=0;
-      //std::cout<<"\t\t"<<output.c_str()<<std::endl;
+      //std::cout<<output.c_str()<<"|"<<output.size()<<std::endl;
       return output;
    }  
 

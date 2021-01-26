@@ -87,15 +87,27 @@ void TStoreGEMData<T>::Set(const GEMDATA<T>* gemdata,const int BlockSize,
     const uint32_t _MIDASTime, const double _RunTime)
 {
     RawLabVIEWtimestamp = gemdata->timestamp;
+    //Please check this calculation
+    RawLabVIEWAsUNIXTime  = gemdata->GetUnixTimestamp(_TimestampEndianness);
+       //Really, check this fraction calculation
+       
+    double fraction = (double) gemdata->GetLabVIEWFineTime(_TimestampEndianness)/(double)((uint64_t)-1);
+    assert(fraction<1);
+    RawLabVIEWAsUNIXTime += fraction;
     TimestampEndianness = _TimestampEndianness;
     DataEndianness      = _DataEndianness;
     MIDASTime           = _MIDASTime;
+    //std::cout<<"MIDAS:"<< MIDASTime;
     RunTime             = _RunTime;
+    //std::cout<<"RunTime"<<RunTime<<std::endl;
     data.clear();
-    data.reserve(BlockSize);
-    for (size_t i=0; i<BlockSize; i++)
+    int entries=gemdata->GetEntries(BlockSize);
+    data.reserve(entries);
+    for (size_t i=0; i<entries; i++)
     {
+        //std::cout<<"DATA: "<<gemdata->DATA[i];
         data.push_back(gemdata->DATA[i]);
+        //std::cout<<"\t"<<data.back()<<std::endl;
     }
 }
 

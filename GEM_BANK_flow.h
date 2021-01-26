@@ -21,9 +21,10 @@ class GEMBANKARRAY_Flow: public TAFlowEvent
    GEMBANKARRAY* data;
    uint32_t MIDAS_TIME;
     public:
-  GEMBANKARRAY_Flow(TAFlowEvent* flow, GEMBANKARRAY* e, int BankLen, uint32_t MIDAS_TIME)
+  GEMBANKARRAY_Flow(TAFlowEvent* flow, GEMBANKARRAY* e, int BankLen, uint32_t _MIDAS_TIME)
        : TAFlowEvent(flow)
   {
+      MIDAS_TIME=_MIDAS_TIME;
       std::cout<<"Bank len:"<<BankLen<<std::endl;
       data = (GEMBANKARRAY*)malloc(BankLen);
       memcpy(data,e,BankLen);
@@ -43,9 +44,10 @@ class GEMBANK_Flow: public TAFlowEvent
    GEMBANK<void*>* data;
    uint32_t MIDAS_TIME;
    public:
-   GEMBANK_Flow(TAFlowEvent* flow, GEMBANK<void*>* e, int BankLen, uint32_t MIDAS_TIME)
+   GEMBANK_Flow(TAFlowEvent* flow, GEMBANK<void*>* e, int BankLen, uint32_t _MIDAS_TIME)
        : TAFlowEvent(flow)
    {
+      MIDAS_TIME=_MIDAS_TIME;
       //data = new GEMBANK<T>(e);
       data = (GEMBANK<void*>*)malloc(BankLen);
       memcpy(data,e,BankLen);
