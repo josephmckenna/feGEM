@@ -242,7 +242,6 @@ class GEMBANK {
       {
          const GEMDATA<T>* data=GetDataEntry(i);
          data->print(BlockSize, TimestampEndianness,DataEndianness,IsString);
-         buf+=BlockSize;
       }
    }
 
