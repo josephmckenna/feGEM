@@ -13,7 +13,14 @@ class PeriodicityManager
    TMFE* fMfe;
    int fPeriodicWithData;
    int fPeriodicWithoutData;
+
+   int fGEMBankEvents;
+   double fGEMStatLastTime;
+   
+
    MVOdb* fOdbStatistics; 
+
+
 
    public:
    PeriodicityManager(TMFE* mfe,TMFeEquipment* eq);
@@ -21,6 +28,10 @@ class PeriodicityManager
    void AddRemoteCaller(char* prog);
    void LogPeriodicWithData();
    void LogPeriodicWithoutData();
+
+   void AddBanksProcessed(int nbanks);
+   void WriteGEMBankStatistics();
+
    void UpdatePerodicity();
    void ProcessMessage(GEMBANK<char>* bank);
    const int GetWaitPeriod() { return fPeriod; }

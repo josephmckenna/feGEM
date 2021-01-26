@@ -231,17 +231,18 @@ class GEMBANK {
       std::cout<<"  BlockSize:"<<BlockSize<<std::endl;
       std::cout<<"  NumberOfEntries:"<<NumberOfEntries<<std::endl;
    }
+
    void print() const
    {
       printheader();
       bool IsString=false;
       if (strncmp(NAME.DATATYPE,"STR",3)==0)
          IsString=true;
-      ;
       for (int i=0; i<NumberOfEntries; i++)
       {
          const GEMDATA<T>* data=GetDataEntry(i);
          data->print(BlockSize, TimestampEndianness,DataEndianness,IsString);
+         buf+=BlockSize;
       }
    }
 

@@ -28,8 +28,11 @@ void HistoryVariable::BuildCPUMEMHistoryPlot(const GEMBANK<T>* GEM_bank, TMFE* m
       std::vector<std::string> Variables;
       for (int i = 0; i < NVARS; i++)
       {
-         Variables.push_back(
-            eq->fName + "/CPUMEM:CPUMEM[" + std::to_string(i) + "]"
+         std::string path=eq->fName + "/CPUMEM";
+         if (path.size()>31)
+            path = path.substr(0,31);
+        Variables.push_back(
+            path + ":CPUMEM[" + std::to_string(i) + "]"
          );
       }
       OdbPlot->WSA("Variables",Variables,size);

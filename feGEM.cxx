@@ -27,7 +27,7 @@ void feGEMClass::HandleBeginRun()
    fMfe->fOdbRoot->RU32("Runinfo/Start Time binary", &RUN_START_T);
    //Stop time gets reset to 0 (1/1/1970) at start run
    //fMfe->fOdbRoot->RU32("Runinfo/Stop Time binary", &RUN_STOP_T);
-   fEq->SetStatus("Running", "#00FF00");
+   //fEq->SetStatus("Running", "#00FF00");
    RunStatus=Running;
 }
 
@@ -50,7 +50,8 @@ void feGEMClass::HandleCommandBank(const GEMDATA<char>* bank,const char* command
 {
    
    //Add 'Commands' that can be sent to feGEM, they either change something or get a response back.
-
+   std::cout<<"COMMAND"<<command<< " from: "<< hostname << std::endl;
+   
 
    //Banks associated with a new commection (1/4)
    if (strncmp(command,"START_FRONTEND",14)==0)
@@ -84,7 +85,7 @@ void feGEMClass::HandleCommandBank(const GEMDATA<char>* bank,const char* command
       return;
    }
    //Banks associated with a new commection (4/4)
-   else if (strncmp(command,"GIVE_ME_PORT",14)==0)
+   else if (strncmp(command,"GIVE_ME_PORT",12)==0)
    {
       assert(feGEMClassType==SUPERVISOR);
       int WorkerNo=FindHostInWorkerList(bank->DATA);
@@ -97,7 +98,7 @@ void feGEMClass::HandleCommandBank(const GEMDATA<char>* bank,const char* command
       return;
    }
 
-   else if (strncmp(command,"ALLOW_SSH_TUNNEL",16)==0) //VARNAME is only 15 char long
+   else if (strncmp(command,"ALLOW_SSH_TUNNEL",16)==0) 
    {
       if (!allowed_hosts->SelfRegistrationIsAllowed())
       {
@@ -384,6 +385,7 @@ void feGEMClass::LogBank(const char* buf, const char* hostname)
 
 int feGEMClass::HandleBankArray(const char * ptr,const char* hostname)
 {
+   int NGEMBanks = 0;
    GEMBANKARRAY* array=(GEMBANKARRAY*)ptr;
    if (array->GetTotalSize() > (uint32_t)fEventSize)
    {
@@ -400,10 +402,10 @@ int feGEMClass::HandleBankArray(const char * ptr,const char* hostname)
    for (uint32_t i=0; i<array->NumberOfEntries; i++)
    {
       GEMBANK<double>* bank=(GEMBANK<double>*)buf;
-      HandleBank(buf, hostname);
+      NGEMBanks += HandleBank(buf, hostname);
       buf+=bank->GetHeaderSize()+bank->BlockSize*bank->NumberOfEntries;
    }
-   return array->NumberOfEntries;
+   return NGEMBanks;
 }
 
 int feGEMClass::HandleBank(const char * ptr,const char* hostname)
@@ -422,7 +424,7 @@ int feGEMClass::HandleBank(const char * ptr,const char* hostname)
       return -1;
    }
    LogBank(ptr,hostname);
-   return 1;
+   return ThisBank->NumberOfEntries;
 }
 void feGEMClass::Run()
 {
@@ -609,6 +611,7 @@ void feGEMClass::ServeHost()
    std::chrono::duration<double, std::milli> handlingtime=timer_stop - timer_start;
    //std::cout<<"["<<fEq->fName.c_str()<<"] Handling time: "<<handlingtime.count()*1000 <<"ms"<<std::endl;
    printf ("[%s] Handled %c%c%c%c %d banks (%d bytes) in %fms",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],nbanks,read_status,handlingtime.count());
+   periodicity.AddBanksProcessed(nbanks);
    if (fDebugMode)
       printf(" (debug mode on)");
    printf("\n");
@@ -842,12 +845,12 @@ const char* feGEMSupervisor::AddNewClient(const char* hostname)
       std::string name = "feGEM_";
       name+=hostname;
       TMFE* mfe=fMfe;
-      if (name.size()>31)
+      if (name.size()>(31 - 4))
       {
          mfe->Msg(MERROR, name.c_str(), "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
          std::string tmp=name;
          name.clear();
-         for (int i=0; i<31; i++)
+         for (int i=0; i<(31 - 4); i++)
          {
             name+=tmp[i];
          }
