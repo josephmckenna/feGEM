@@ -50,7 +50,8 @@ void feGEMClass::HandleCommandBank(const GEMDATA<char>* bank,const char* command
 {
    
    //Add 'Commands' that can be sent to feGEM, they either change something or get a response back.
-
+   std::cout<<"COMMAND"<<command<< " from: "<< hostname << std::endl;
+   
 
    //Banks associated with a new commection (1/4)
    if (strncmp(command,"START_FRONTEND",14)==0)
@@ -84,7 +85,7 @@ void feGEMClass::HandleCommandBank(const GEMDATA<char>* bank,const char* command
       return;
    }
    //Banks associated with a new commection (4/4)
-   else if (strncmp(command,"GIVE_ME_PORT",14)==0)
+   else if (strncmp(command,"GIVE_ME_PORT",12)==0)
    {
       assert(feGEMClassType==SUPERVISOR);
       int WorkerNo=FindHostInWorkerList(bank->DATA);
@@ -97,7 +98,7 @@ void feGEMClass::HandleCommandBank(const GEMDATA<char>* bank,const char* command
       return;
    }
 
-   else if (strncmp(command,"ALLOW_SSH_TUNNEL",16)==0) //VARNAME is only 15 char long
+   else if (strncmp(command,"ALLOW_SSH_TUNNEL",16)==0) 
    {
       if (!allowed_hosts->SelfRegistrationIsAllowed())
       {
