@@ -19,8 +19,9 @@ class GEMBANKARRAY_Flow: public TAFlowEvent
 {
    public:
    GEMBANKARRAY* data;
+   uint32_t MIDAS_TIME;
     public:
-  GEMBANKARRAY_Flow(TAFlowEvent* flow, GEMBANKARRAY* e, int BankLen)
+  GEMBANKARRAY_Flow(TAFlowEvent* flow, GEMBANKARRAY* e, int BankLen, uint32_t MIDAS_TIME)
        : TAFlowEvent(flow)
   {
       std::cout<<"Bank len:"<<BankLen<<std::endl;
@@ -40,8 +41,9 @@ class GEMBANK_Flow: public TAFlowEvent
 {
    public:
    GEMBANK<void*>* data;
+   uint32_t MIDAS_TIME;
    public:
-   GEMBANK_Flow(TAFlowEvent* flow, GEMBANK<void*>* e, int BankLen)
+   GEMBANK_Flow(TAFlowEvent* flow, GEMBANK<void*>* e, int BankLen, uint32_t MIDAS_TIME)
        : TAFlowEvent(flow)
    {
       //data = new GEMBANK<T>(e);

@@ -46,6 +46,21 @@ class LVTimestamp {
       SubSecondFraction=change_endian(SubSecondFraction);
       //print();
    }
+   LVTimestamp(const LVTimestamp& ts)
+   {
+      Seconds = ts.Seconds;
+      SubSecondFraction = ts.SubSecondFraction;
+   }
+   LVTimestamp& operator=(const LVTimestamp& ts)
+   {
+      Seconds = ts.Seconds;
+      SubSecondFraction = ts.SubSecondFraction;
+      return *this;
+   }
+   ~LVTimestamp()
+   {
+      //dtor
+   }
    void print()
    {
       std::cout<<"LV Seconds:\t"<<Seconds<<std::endl;
@@ -67,6 +82,7 @@ class GEMDATA {
    //LabVIEW formatted time... (128bit)
    LVTimestamp timestamp;
    T DATA[];
+   
    void print(uint32_t size, uint16_t TimestampEndianness, uint16_t DataEndianness, bool IsString) const
    {
       std::cout<<"   Coarse Time:"<<GetLabVIEWCoarseTime(TimestampEndianness)<<std::endl;
@@ -175,14 +191,14 @@ class BANK_TITLE {
       return output;
    }  
 
-
+   std::string GetBANK() const          { return SanitiseBankString(BANK,4);                              }
    std::string GetType() const          { return SanitiseBankString(DATATYPE,4);                          }
    std::string GetCategoryName() const  { return SanitiseBankString(VARCATEGORY,sizeof(VARCATEGORY));     }
    std::string GetVariableName() const  { return SanitiseBankString(VARNAME,sizeof(VARNAME));             }
    std::string GetEquipmentType() const { return SanitiseBankString(EquipmentType,sizeof(EquipmentType)); }
    
 };
-static_assert(sizeof(BANK_TITLE)==72);
+static_assert(sizeof(BANK_TITLE)==72,"BANK_TITLE must be 72 bytes... compiler issues likely");
 
 //--------------------------------------------------
 // GEMBANK object
@@ -204,8 +220,7 @@ class GEMBANK {
    uint16_t DataEndianness;
    uint32_t BlockSize;
    uint32_t NumberOfEntries;
-   GEMDATA<T> DATA[];
-
+   
    void printheader() const
    {
       NAME.print();
@@ -216,23 +231,21 @@ class GEMBANK {
       std::cout<<"  BlockSize:"<<BlockSize<<std::endl;
       std::cout<<"  NumberOfEntries:"<<NumberOfEntries<<std::endl;
    }
-
    void print() const
    {
       printheader();
       bool IsString=false;
       if (strncmp(NAME.DATATYPE,"STR",3)==0)
          IsString=true;
+      ;
       for (int i=0; i<NumberOfEntries; i++)
       {
-         char* buf=(char*)&DATA;
-         GEMDATA<T>* data=(GEMDATA<T>*)buf;
+         const GEMDATA<T>* data=GetDataEntry(i);
          data->print(BlockSize, TimestampEndianness,DataEndianness,IsString);
-         buf+=BlockSize;
       }
    }
 
-
+   std::string GetBANK() const          { return NAME.GetBANK();          }
    std::string GetType() const          { return NAME.GetType();          }
    std::string GetCategoryName() const  { return NAME.GetCategoryName();  }
    std::string GetVariableName() const  { return NAME.GetVariableName();  }
@@ -269,7 +282,7 @@ class GEMBANK {
       NumberOfEntries=-1;
    }
 
-   const GEMDATA<T>* GetFirstDataEntry() const { return &DATA[0]; }
+   const GEMDATA<T>* GetFirstDataEntry() const { return (GEMDATA<T>*)this + sizeof(GEMBANK); }
    
    uint32_t GetSizeOfDataArray() const
    {
@@ -279,8 +292,8 @@ class GEMBANK {
    
    const GEMDATA<T>* GetDataEntry(uint32_t i) const
    {
-      char* ptr=(char*)&DATA;
-      ptr+=BlockSize*(i);
+      char* ptr = (char*)this + sizeof(GEMBANK);
+      ptr += BlockSize*(i);
       return (GEMDATA<T>*)ptr;
    }
    const GEMDATA<T>* GetLastDataEntry() const { return GetDataEntry(NumberOfEntries-1); }
@@ -288,9 +301,10 @@ class GEMBANK {
    const int64_t GetFirstUnixTimestamp() const { return GetFirstDataEntry()->GetUnixTimestamp(TimestampEndianness); }
    const int64_t GetLastUnixTimestamp() const  { return GetLastDataEntry()->GetUnixTimestamp(TimestampEndianness);  }
 };
+static_assert(sizeof(GEMBANK<void*>)==88,"BANKBANK must be 88 bytes... compiler issues likely");
 
 //Call the correct print based on type
-void PrintGEMBANK(GEMBANK<void*>* bank)
+static void PrintGEMBANK(GEMBANK<void*>* bank)
 {
    if (strncmp(bank->NAME.DATATYPE,"DBL",3)==0) 
       ((GEMBANK<double>*)bank)->print();

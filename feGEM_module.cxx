@@ -9,6 +9,8 @@
 #include "GEM_BANK.h"
 #include "GEM_BANK_flow.h"
 
+#include "TTree.h"
+
 #include "manalyzer.h"
 #include "midasio.h"
 
@@ -18,6 +20,127 @@ class feGEMModuleFlags
 public:
    bool fPrint = false;
 };
+
+
+#include "TStoreGEMEvent.h"
+class feGEMModuleWriter
+{
+   private:
+      TTree* headertree;
+      TBranch* headerbranch;
+      std::vector<TTree*> datatrees;
+      std::vector<TBranch*> data;
+      double RunTimeOffset;
+   private:
+      template <typename T> void BranchTreeFromData(TTree* t, TBranch* b, GEMBANK<T>* bank, uint32_t MIDAS_TIME, const std::string& name)
+      {
+         //TStoreGEMEventHeader GEMEvents;
+         TStoreGEMData<T>* data = new TStoreGEMData<T>();
+         
+         b->SetAddress(&data);
+
+         for (int i=0; i<bank->NumberOfEntries; i++)
+         {
+            data->Set(
+               bank->GetDataEntry(i),
+               bank->BlockSize,
+               bank->TimestampEndianness,
+               bank->DataEndianness,
+               MIDAS_TIME,
+               RunTimeOffset
+               );
+            //gemdata->print(BlockSize, TimestampEndianness,DataEndianness,IsString);
+            t->Fill();
+         }
+      }
+      template<typename T>
+      std::pair<TTree*,TBranch*> FindOrCreateTree(TARunInfo* runinfo, GEMBANK<T>* bank, const std::string& CombinedName)
+      {
+         int numberoftrees = datatrees.size();
+
+         for(int i=0; i<numberoftrees; i++)
+         {
+            std::string treename = datatrees[i]->GetName();
+            if(treename == CombinedName)
+            {
+               //Tree exists
+               return {datatrees[i],data[i]};
+            }
+         }
+         runinfo->fRoot->fOutputFile->cd("feGEM");
+         TTree* currentTree = new TTree(CombinedName.c_str(),"feGEM Event Tree");
+         TStoreGEMData<T> event;
+         TBranch* branch = currentTree->Branch("GEMData","TStoreGEMData",&event);
+         datatrees.push_back(currentTree);
+         data.push_back(branch);
+         return {currentTree, branch};
+      }
+      public:
+      feGEMModuleWriter(double offset = 0)
+      {
+         RunTimeOffset = offset;
+      }
+      
+
+      void SaveToTree(TARunInfo* runinfo, GEMBANK<void*>* bank, uint32_t MIDAS_TIME)
+      {
+         std::string CombinedName = bank->GetCategoryName() + "_" +bank->GetVariableName();
+         #ifdef HAVE_CXX11_THREADS
+         std::lock_guard<std::mutex> lock(TAMultithreadHelper::gfLock);
+         #endif
+         if (strncmp(bank->NAME.DATATYPE,"DBL",3)==0)
+         {
+            std::pair<TTree*,TBranch*> t = FindOrCreateTree(runinfo, (GEMBANK<double>*)bank, CombinedName);
+            BranchTreeFromData(t.first, t.second, (GEMBANK<double>*)bank, MIDAS_TIME, CombinedName);
+         }
+         else if (strncmp(bank->NAME.DATATYPE,"FLT",3)==0)
+         {
+            std::pair<TTree*,TBranch*> t = FindOrCreateTree(runinfo, (GEMBANK<float>*)bank, CombinedName);
+            BranchTreeFromData(t.first, t.second, (GEMBANK<float>*)bank, MIDAS_TIME, CombinedName);
+         }
+         else if (strncmp(bank->NAME.DATATYPE,"BOOL",4)==0)
+         {
+            std::pair<TTree*,TBranch*> t = FindOrCreateTree(runinfo, (GEMBANK<bool>*)bank, CombinedName);
+            BranchTreeFromData(t.first, t.second, (GEMBANK<bool>*)bank, MIDAS_TIME, CombinedName);
+         }
+         else if (strncmp(bank->NAME.DATATYPE,"I32",3)==0)
+         {
+            std::pair<TTree*,TBranch*> t = FindOrCreateTree(runinfo, (GEMBANK<int32_t>*)bank, CombinedName);
+            BranchTreeFromData(t.first, t.second, (GEMBANK<int32_t>*)bank, MIDAS_TIME, CombinedName);
+         }
+         else if (strncmp(bank->NAME.DATATYPE,"U32",4)==0)
+         {
+            std::pair<TTree*,TBranch*> t = FindOrCreateTree(runinfo, (GEMBANK<uint32_t>*)bank, CombinedName);
+            BranchTreeFromData(t.first, t.second, (GEMBANK<uint32_t>*)bank, MIDAS_TIME, CombinedName);
+         }
+         else if (strncmp(bank->NAME.DATATYPE,"U16",3)==0)
+         {
+            std::pair<TTree*,TBranch*> t = FindOrCreateTree(runinfo, (GEMBANK<uint16_t>*)bank, CombinedName);
+            BranchTreeFromData(t.first, t.second, (GEMBANK<uint16_t>*)bank, MIDAS_TIME, CombinedName);
+         }
+         else if (strncmp(bank->NAME.DATATYPE,"STRA",4)==0)
+         {
+            std::cout<<"Writing of string array probably wobbly"<<std::endl;
+            std::pair<TTree*,TBranch*> t = FindOrCreateTree(runinfo, (GEMBANK<char>*)bank, CombinedName);
+            BranchTreeFromData(t.first, t.second, (GEMBANK<char>*)bank, MIDAS_TIME, CombinedName);
+         }
+         else if (strncmp(bank->NAME.DATATYPE,"STR",3)==0) 
+         {
+            std::pair<TTree*,TBranch*> t = FindOrCreateTree(runinfo, (GEMBANK<char>*)bank, CombinedName);
+            BranchTreeFromData(t.first, t.second, (GEMBANK<char>*)bank, MIDAS_TIME, CombinedName);
+         }
+         else
+         {
+            std::cout<<"Unknown bank data type... "<<std::endl;
+            bank->print();
+         }
+         return;
+      }
+
+};
+
+
+
 class feGEMModule: public TARunObject
 {
 private:
@@ -25,7 +148,7 @@ private:
 public:
    feGEMModuleFlags* fFlags;
    bool fTrace = false;
-   
+   feGEMModuleWriter writer;
    
    feGEMModule(TARunInfo* runinfo, feGEMModuleFlags* flags)
       : TARunObject(runinfo), fFlags(flags)
@@ -43,6 +166,8 @@ public:
 
    void BeginRun(TARunInfo* runinfo)
    {
+      runinfo->fRoot->fOutputFile->cd();
+      gDirectory->mkdir("feGEM")->cd();
       if (fTrace)
          printf("feGEMModule::BeginRun, run %d, file %s\n", runinfo->fRunNo, runinfo->fFileName.c_str());
     }
@@ -74,20 +199,24 @@ public:
       if (array)
       {
          array->data->print();
+         uint32_t MIDAS_TIME = array->MIDAS_TIME;
          char* dataptr = (char*) &array->data->DATA[0];
          for (int i=0; i<array->data->NumberOfEntries; i++)
          {
             GEMBANK<void*>* bank = (GEMBANK<void*>*)dataptr;
-            PrintGEMBANK(bank);
+            writer.SaveToTree(runinfo, bank, MIDAS_TIME);
+            //PrintGEMBANK(bank);
             dataptr += bank->GetTotalSize();
          }
          std::cout<<"============================="<<std::endl;
       }   
       GEMBANK_Flow* gembank = flow->Find<GEMBANK_Flow>();
+
       if (gembank)
       {
          GEMBANK<void*>* bank = gembank->data;
-         PrintGEMBANK(bank);
+         writer.SaveToTree(runinfo, bank, gembank->MIDAS_TIME);
+         //PrintGEMBANK(bank);
       }
       
       return flow; 
@@ -103,6 +232,7 @@ public:
          if (MIDAS_BANK)
          {
             nGEMBanks++;
+            uint32_t MIDAS_TIME = me->time_stamp;
             char* GEM_BANK_DATA = me->GetBankData(MIDAS_BANK);
             char GEM_BANK_VERSION = GEM_BANK_DATA[3];
             int BankLen = MIDAS_BANK->data_size;
@@ -118,7 +248,9 @@ public:
                      flow = new GEMBANK_Flow(
                         flow,
                         (GEMBANK<void*>*)GEM_BANK_DATA,
-                        BankLen);
+                        BankLen,
+                        MIDAS_TIME
+                        );
                      return flow;
                   }
                   default:
@@ -140,7 +272,9 @@ public:
                      flow = new GEMBANKARRAY_Flow(
                         flow,
                         (GEMBANKARRAY*)GEM_BANK_DATA,
-                        BankLen);
+                        BankLen,
+                        MIDAS_TIME
+                        );
                      return flow;
                   }
                   default:
