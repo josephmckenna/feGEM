@@ -71,7 +71,25 @@ class feGEMModuleWriter
          runinfo->fRoot->fOutputFile->cd("feGEM");
          TTree* currentTree = new TTree(CombinedName.c_str(),"feGEM Event Tree");
          TStoreGEMData<T> event;
-         TBranch* branch = currentTree->Branch("GEMData","TStoreGEMData",&event);
+
+         std::string BranchName = "TStoreGEMData<";
+            if (typeid(T) == typeid(double))
+               BranchName += "double>";
+            else if (typeid(T) == typeid(float))
+               BranchName += "float>";
+            else if (typeid(T) == typeid(bool))
+               BranchName += "bool>";
+            else if (typeid(T) == typeid(int32_t))
+               BranchName += "int32_t>";
+            else if (typeid(T) == typeid(uint32_t))
+               BranchName += "uint32_t>";
+            else if (typeid(T) == typeid(uint16_t))
+               BranchName += "uint16_t>";
+            else if (typeid(T) == typeid(char))
+               BranchName += "char>";
+            else
+               BranchName += "unknown>";
+         TBranch* branch = currentTree->Branch(BranchName.c_str(),"TStoreGEMData",&event);
          datatrees.push_back(currentTree);
          data.push_back(branch);
          return {currentTree, branch};
