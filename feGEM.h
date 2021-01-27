@@ -85,8 +85,8 @@ public:
    std::string HandleRpc(const char* cmd, const char* args);
    void HandleBeginRun();
    void HandleEndRun();
-   void HandleStrBank(GEMBANK<char>* bank,const char* hostname);
-   void HandleStrArrayBank(GEMBANK<char>* bank,const char* hostname);
+   void HandleStrBank(GEMBANK<char>* bank, const char* hostname);
+   void HandleStrArrayBank(GEMBANK<char>* bank);
    void HandleCommandBank(const GEMDATA<char>* bank,const char* command,const char* hostname);
    void LogBank(const char* buf,const char* hostname);
    int HandleBankArray(const char * ptr,const char* hostname);
@@ -105,7 +105,7 @@ class feGEMWorker :
 {
    public:
    MVOdb* fOdbSupervisorSettings;
-   feGEMWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts, int debugMode = 0);
+   feGEMWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts, const char* client_hostname, int debugMode = 0);
    void Init(MVOdb* supervisor_settings_path);
 
 };

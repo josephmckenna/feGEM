@@ -71,17 +71,22 @@ class HistoryLogger
 public:
    TMFE* fMfe;
    TMFeEquipment* fEq;
+   std::string fFullHostName;
    std::vector<HistoryVariable*> fVariables;
    HistoryLogger(TMFE* mfe,TMFeEquipment* eq);
+   void SetClientHostname( const char* hostname)
+   {
+      fFullHostName=hostname;
+   }
    ~HistoryLogger();
    template<typename T>
-   HistoryVariable* AddNewVariable(const GEMBANK<T>* gembank, const char* hostname);
+   HistoryVariable* AddNewVariable(const GEMBANK<T>* gembank);
    template<typename T>
-   HistoryVariable* Find(const GEMBANK<T>* gembank, const char* hostname, bool AddIfNotFound);
+   HistoryVariable* Find(const GEMBANK<T>* gembank, bool AddIfNotFound);
    template<typename T>
-   void Update(GEMBANK<T>* gembank, const char* hostname)
+   void Update(GEMBANK<T>* gembank)
    {
-      HistoryVariable* UpdateThis=Find(gembank, hostname, true);
+      HistoryVariable* UpdateThis=Find(gembank, true);
       UpdateThis->Update(gembank);
    }
 };
