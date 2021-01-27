@@ -106,7 +106,7 @@ int main(int argc, char* argv[])
    else
    {
       //Probably broken
-      feGEMWorker* myfe = new feGEMWorker(mfe,eq,new AllowedHosts(mfe));
+      feGEMWorker* myfe = new feGEMWorker(mfe,eq,new AllowedHosts(mfe),client.c_str());
       myfe->fPort=port;
       mfe->RegisterRpcHandler(myfe);
       myfe->Init(eq->fOdbEqSettings);

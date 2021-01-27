@@ -210,7 +210,7 @@ void feGEMClass::HandleCommandBank(const GEMDATA<char>* bank,const char* command
    return;
 }
 
-void feGEMClass::HandleStrArrayBank(GEMBANK<char>* bank,const char* hostname)
+void feGEMClass::HandleStrArrayBank(GEMBANK<char>* bank)
 {
    if (strncmp(bank->NAME.VARCATEGORY,"CLIENT_INFO",14)==0)
    {
@@ -253,7 +253,7 @@ void feGEMClass::HandleStrArrayBank(GEMBANK<char>* bank,const char* hostname)
    }
 }
 
-void feGEMClass::HandleStrBank(GEMBANK<char>* bank,const char* hostname)
+void feGEMClass::HandleStrBank(GEMBANK<char>* bank, const char* hostname)
 {
    //bank->print();
 
@@ -262,7 +262,7 @@ void feGEMClass::HandleStrBank(GEMBANK<char>* bank,const char* hostname)
       const char* command=bank->NAME.EquipmentType;
       for (uint32_t i=0; i<bank->NumberOfEntries; i++)
       {
-         HandleCommandBank(bank->GetDataEntry(i),command,hostname);
+         HandleCommandBank(bank->GetDataEntry(i),command, hostname);
       }
       return;
    }
@@ -369,7 +369,7 @@ void feGEMClass::LogBank(const char* buf, const char* hostname)
       logger.Update(bank);*/
    } else if (strncmp(ThisBank->NAME.DATATYPE,"STRA",4)==0) {
       GEMBANK<char>* bank=(GEMBANK<char>*)buf;
-      HandleStrArrayBank(bank,hostname);
+      HandleStrArrayBank(bank);
       return;
    } else if (strncmp(ThisBank->NAME.DATATYPE,"STR",3)==0) {
       GEMBANK<char>* bank=(GEMBANK<char>*)buf;
@@ -638,11 +638,11 @@ void feGEMClass::ServeHost()
 }
 
 
-feGEMWorker::feGEMWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts, int debugMode): feGEMClass(mfe,eq,hosts,WORKER,debugMode)
+feGEMWorker::feGEMWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts, const char* client_hostname, int debugMode): feGEMClass(mfe,eq,hosts,WORKER,debugMode)
 {
    fMfe = mfe;
    fEq  = eq;
-   
+   logger.SetClientHostname(client_hostname);
    //Default event size ok 10kb, will be overwritten by ODB entry in Init()
    fEventSize = 10000;
    fEventBuf  = NULL;
@@ -866,7 +866,7 @@ const char* feGEMSupervisor::AddNewClient(const char* hostname)
       worker_eq->ZeroStatistics();
       worker_eq->WriteStatistics();
       mfe->RegisterEquipment(worker_eq);
-      feGEMWorker* workerfe = new feGEMWorker(mfe,worker_eq,allowed_hosts);
+      feGEMWorker* workerfe = new feGEMWorker(mfe,worker_eq,allowed_hosts,hostname);
       workerfe->fPort=port;
       mfe->RegisterRpcHandler(workerfe);
       workerfe->Init(fEq->fOdbEqSettings);
