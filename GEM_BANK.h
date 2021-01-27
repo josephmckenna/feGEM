@@ -199,6 +199,13 @@ class BANK_TITLE {
    const std::string GetCategoryName() const  { return SanitiseBankString(VARCATEGORY,sizeof(VARCATEGORY));     }
    const std::string GetVariableName() const  { return SanitiseBankString(VARNAME,sizeof(VARNAME));             }
    const std::string GetEquipmentType() const { return SanitiseBankString(EquipmentType,sizeof(EquipmentType)); }
+   const std::string GetCombinedName() const
+   {
+      if (strncmp(VARCATEGORY,"THISHOST",8)==0)
+         return GetEquipmentType() + "\\" + GetVariableName();
+      else
+         return GetCategoryName() + "\\" + GetVariableName();
+   }
    
 };
 static_assert(sizeof(BANK_TITLE)==72,"BANK_TITLE must be 72 bytes... compiler issues likely");
@@ -253,6 +260,7 @@ class GEMBANK {
    std::string GetCategoryName() const  { return NAME.GetCategoryName();  }
    std::string GetVariableName() const  { return NAME.GetVariableName();  }
    std::string GetEquipmentType() const { return NAME.GetEquipmentType(); }
+   std::string GetCombinedName() const  { return NAME.GetCombinedName();  }
    uint32_t GetHeaderSize()
    {
       return sizeof(NAME)
