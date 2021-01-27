@@ -103,7 +103,9 @@ class feGEMModuleWriter
 
       void SaveToTree(TARunInfo* runinfo, GEMBANK<void*>* bank, uint32_t MIDAS_TIME)
       {
-         std::string CombinedName = bank->GetCategoryName() + "\\" +bank->GetVariableName();
+         
+         std::string CombinedName = bank->GetCombinedName();
+
          #ifdef HAVE_CXX11_THREADS
          std::lock_guard<std::mutex> lock(TAMultithreadHelper::gfLock);
          #endif
