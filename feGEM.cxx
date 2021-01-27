@@ -309,7 +309,7 @@ void feGEMClass::HandleStrBank(GEMBANK<char>* bank,const char* hostname)
       std::cout<<"String not understood!"<<std::endl;
       bank->print();
    }
-   logger.Update(bank);
+   logger.Update(bank, hostname);
 }
 
 void feGEMClass::LogBank(const char* buf, const char* hostname)
@@ -333,13 +333,13 @@ void feGEMClass::LogBank(const char* buf, const char* hostname)
    if (strncmp(ThisBank->NAME.DATATYPE,"DBL",3)==0) {
       GEMBANK<double>* bank=(GEMBANK<double>*)buf;
       //bank->print();
-      logger.Update(bank);
+      logger.Update(bank, hostname);
    } else if (strncmp(ThisBank->NAME.DATATYPE,"FLT",3)==0) {
       GEMBANK<float>* bank=(GEMBANK<float>*)buf;
-      logger.Update(bank);
+      logger.Update(bank, hostname);
    } else if (strncmp(ThisBank->NAME.DATATYPE,"BOOL",4)==0) {
       GEMBANK<bool>* bank=(GEMBANK<bool>*)buf;
-      logger.Update(bank);
+      logger.Update(bank, hostname);
    //Not supported by ODB
    /*} else if (strncmp(ThisBank->NAME.DATATYPE,"I64",3)==0) {
       GEMBANK<int64_t>* bank=(GEMBANK<int64_t>*)buf;
@@ -349,18 +349,18 @@ void feGEMClass::LogBank(const char* buf, const char* hostname)
       logger.Update(bank);*/
    } else if (strncmp(ThisBank->NAME.DATATYPE,"I32",3)==0) {
       GEMBANK<int32_t>* bank=(GEMBANK<int32_t>*)buf;
-      logger.Update(bank);
+      logger.Update(bank, hostname);
    } else if (strncmp(ThisBank->NAME.DATATYPE,"U32",4)==0) {
       GEMBANK<uint32_t>* bank=(GEMBANK<uint32_t>*)buf;
       //bank->print();
-      logger.Update(bank);
+      logger.Update(bank, hostname);
    //Not supported by ODB
    /*} else if (strncmp(ThisBank->NAME.DATATYPE,"I16",3)==0) {
       GEMBANK<int16_t>* bank=(GEMBANK<int16_t>*)buf;
       logger.Update(bank);*/
    } else if (strncmp(ThisBank->NAME.DATATYPE,"U16",3)==0) {
       GEMBANK<uint16_t>* bank=(GEMBANK<uint16_t>*)buf;
-      logger.Update(bank);
+      logger.Update(bank, hostname);
    /*} else if (strncmp(ThisBank->NAME.DATATYPE,"I8",2)==0) {
       GEMBANK<int8_t>* bank=(GEMBANK<int8_t>*)buf;
       logger.Update(bank);

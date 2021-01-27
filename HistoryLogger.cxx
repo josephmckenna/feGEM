@@ -87,10 +87,11 @@ void HistoryVariable::BuildCPUMEMHistoryPlot(const GEMBANK<T>* GEM_bank, TMFE* m
 }
 
 template<typename T>
-HistoryVariable::HistoryVariable(const GEMBANK<T>* GEM_bank, TMFE* mfe,TMFeEquipment* eq )
+HistoryVariable::HistoryVariable(const GEMBANK<T>* GEM_bank, TMFE* mfe,TMFeEquipment* eq, const char* hostname ):
+   fHostName(hostname,31)
 {
    AddHostnameToDescription = false;
-   
+
    fCategory=GEM_bank->GetCategoryName();
    fVarName=GEM_bank->GetVariableName();
    if (GEM_bank->HistoryPeriod!=65535)
@@ -107,19 +108,15 @@ HistoryVariable::HistoryVariable(const GEMBANK<T>* GEM_bank, TMFE* mfe,TMFeEquip
       AddHostnameToDescription = true;
       std::cout<<"Build THISHOST"<<std::endl;
       OdbEq = mfe->fOdbRoot->Chdir((std::string("Equipment/") + eq->fName).c_str(), true);
-      EquipmentName = eq->fName;
-
       if (strncmp(GEM_bank->GetVariableName().c_str(),"CPUMEM",6)==0)
       {
          std::cout<<"Build CPUMEM"<<std::endl;
          BuildCPUMEMHistoryPlot(GEM_bank, mfe,eq );
       }
-      
    }
    else
    {
       OdbEq = mfe->fOdbRoot->Chdir((std::string("Equipment/") + fCategory).c_str(), true);
-      EquipmentName = fCategory;
       //fEq = new TMFeEquipment(mfe,fCategory.c_str(),eq->fCommon);
       //fEq->Init();
    }
@@ -141,10 +138,10 @@ void HistoryVariable::Update(GEMBANK<T>* GEM_bank)
 {
    if (AddHostnameToDescription)
    {
-      assert(EquipmentName.size() < 32);
+      assert(fHostName.size() < 32);
       assert(strncmp(GEM_bank->GetCategoryName().c_str(),"THISHOST",8)==0);
       //BANK has no information about which host it came from (THISHOST)... use the EquipmentType (32 char description) to set it
-      strcpy(GEM_bank->NAME.EquipmentType,EquipmentName.c_str());
+      strcpy(GEM_bank->NAME.EquipmentType,fHostName.c_str());
    }
    if (!UpdateFrequency)
       return;
@@ -189,7 +186,7 @@ HistoryLogger::~HistoryLogger()
 }
 
 template<typename T>
-HistoryVariable* HistoryLogger::AddNewVariable(const GEMBANK<T>* GEM_bank)
+HistoryVariable* HistoryLogger::AddNewVariable(const GEMBANK<T>* GEM_bank, const char* hostname)
 {
    //Assert that category and var name are null terminated
    //assert(GEM_bank->NAME.VARCATEGORY[15]==0);
@@ -203,7 +200,7 @@ HistoryVariable* HistoryLogger::AddNewVariable(const GEMBANK<T>* GEM_bank)
    fEq->fOdbEqSettings->WSAI("feVariables",fVariables.size(), VarAndCategory);
    fEq->fOdbEqSettings->WU32AI("DateAdded",(int)fVariables.size(), GEM_bank->GetFirstUnixTimestamp());
 
-   HistoryVariable* variable = new HistoryVariable(GEM_bank,fMfe,fEq);
+   HistoryVariable* variable = new HistoryVariable(GEM_bank,fMfe,fEq,hostname);
 
    //Push into list of monitored variables
    fVariables.push_back(variable);
@@ -237,7 +234,7 @@ HistoryVariable* HistoryLogger::AddNewVariable(const GEMBANK<T>* GEM_bank)
 }
 
 template<typename T>
-HistoryVariable* HistoryLogger::Find(const GEMBANK<T>* GEM_bank, bool AddIfNotFound=true)
+HistoryVariable* HistoryLogger::Find(const GEMBANK<T>* GEM_bank, const char* hostname, bool AddIfNotFound=true)
 {
    HistoryVariable* FindThis=NULL;
    //Find HistoryVariable that matches 
@@ -252,16 +249,16 @@ HistoryVariable* HistoryLogger::Find(const GEMBANK<T>* GEM_bank, bool AddIfNotFo
    //If no match found... create one
    if (!FindThis && AddIfNotFound)
    {
-      FindThis=AddNewVariable(GEM_bank);
+      FindThis=AddNewVariable(GEM_bank, hostname);
    }
    return FindThis;
 }
 
 
-template HistoryVariable* HistoryLogger::Find(const GEMBANK<char>* GEM_bank, bool AddIfNotFound);
-template HistoryVariable* HistoryLogger::Find(const GEMBANK<double>* GEM_bank, bool AddIfNotFound);
-template HistoryVariable* HistoryLogger::Find(const GEMBANK<bool>* GEM_bank, bool AddIfNotFound);
-template HistoryVariable* HistoryLogger::Find(const GEMBANK<float>* GEM_bank, bool AddIfNotFound);
-template HistoryVariable* HistoryLogger::Find(const GEMBANK<int>* GEM_bank, bool AddIfNotFound);
-template HistoryVariable* HistoryLogger::Find(const GEMBANK<unsigned int>* GEM_bank, bool AddIfNotFound);
-template HistoryVariable* HistoryLogger::Find(const GEMBANK<unsigned short>* GEM_bank, bool AddIfNotFound);
+template HistoryVariable* HistoryLogger::Find(const GEMBANK<char>* GEM_bank, const char* hostname, bool AddIfNotFound);
+template HistoryVariable* HistoryLogger::Find(const GEMBANK<double>* GEM_bank, const char* hostname, bool AddIfNotFound);
+template HistoryVariable* HistoryLogger::Find(const GEMBANK<bool>* GEM_bank, const char* hostname, bool AddIfNotFound);
+template HistoryVariable* HistoryLogger::Find(const GEMBANK<float>* GEM_bank, const char* hostname, bool AddIfNotFound);
+template HistoryVariable* HistoryLogger::Find(const GEMBANK<int>* GEM_bank, const char* hostname, bool AddIfNotFound);
+template HistoryVariable* HistoryLogger::Find(const GEMBANK<unsigned int>* GEM_bank, const char* hostname, bool AddIfNotFound);
+template HistoryVariable* HistoryLogger::Find(const GEMBANK<unsigned short>* GEM_bank, const char* hostname, bool AddIfNotFound);

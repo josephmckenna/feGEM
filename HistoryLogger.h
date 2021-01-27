@@ -19,9 +19,9 @@ class HistoryVariable
    MVOdb* fOdbEqVariables;
    
    bool AddHostnameToDescription;
-   std::string EquipmentName;
+   const std::string fHostName;
    //TMFeEquipment* fEq;
-   template<typename T> HistoryVariable(const GEMBANK<T>* gembank, TMFE* mfe,TMFeEquipment* eq );
+   template<typename T> HistoryVariable(const GEMBANK<T>* gembank, TMFE* mfe,TMFeEquipment* eq, const char* hostname );
    template<typename T> void BuildCPUMEMHistoryPlot(const GEMBANK<T>* GEM_bank, TMFE* mfe,TMFeEquipment* eq );
    template<typename T> bool IsMatch(const GEMBANK<T>* gembank);
    template<typename T> void Update(GEMBANK<T>* gembank);
@@ -75,13 +75,13 @@ public:
    HistoryLogger(TMFE* mfe,TMFeEquipment* eq);
    ~HistoryLogger();
    template<typename T>
-   HistoryVariable* AddNewVariable(const GEMBANK<T>* gembank);
+   HistoryVariable* AddNewVariable(const GEMBANK<T>* gembank, const char* hostname);
    template<typename T>
-   HistoryVariable* Find(const GEMBANK<T>* gembank, bool AddIfNotFound);
+   HistoryVariable* Find(const GEMBANK<T>* gembank, const char* hostname, bool AddIfNotFound);
    template<typename T>
-   void Update(GEMBANK<T>* gembank)
+   void Update(GEMBANK<T>* gembank, const char* hostname)
    {
-      HistoryVariable* UpdateThis=Find(gembank,true);
+      HistoryVariable* UpdateThis=Find(gembank, hostname, true);
       UpdateThis->Update(gembank);
    }
 };
