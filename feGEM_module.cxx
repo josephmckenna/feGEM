@@ -31,6 +31,7 @@ class feGEMModuleWriter
       std::vector<TTree*> datatrees;
       std::vector<TBranch*> data;
       double RunTimeOffset;
+      int runNumber;
    private:
       template <typename T> void BranchTreeFromData(TTree* t, TBranch* b, GEMBANK<T>* bank, uint32_t MIDAS_TIME, const std::string& name)
       {
@@ -47,7 +48,8 @@ class feGEMModuleWriter
                bank->TimestampEndianness,
                bank->DataEndianness,
                MIDAS_TIME,
-               RunTimeOffset
+               RunTimeOffset,
+               runNumber
                );
             //gemdata->print(BlockSize, TimestampEndianness,DataEndianness,IsString);
             t->Fill();
@@ -95,11 +97,17 @@ class feGEMModuleWriter
          return {currentTree, branch};
       }
       public:
-      feGEMModuleWriter(double offset = 0)
+      feGEMModuleWriter()
+      {
+      }
+      void SetStartTime(double offset)
       {
          RunTimeOffset = offset;
       }
-      
+      void SetRunNumber(int _runNumber)
+      {
+         runNumber = _runNumber;
+      }
 
       void SaveToTree(TARunInfo* runinfo, GEMBANK<void*>* bank, uint32_t MIDAS_TIME)
       {
@@ -175,6 +183,7 @@ public:
       : TARunObject(runinfo), fFlags(flags)
    {
       ModuleName="feGEM_module";
+      writer = new feGEMModuleWriter();
       if (fTrace)
          printf("feGEMModule::ctor!\n");
    }
@@ -190,7 +199,8 @@ public:
       runinfo->fRoot->fOutputFile->cd();
       gDirectory->mkdir("feGEM")->cd();
       runinfo->fOdb->RU32("/Runinfo/Start time binary",&RunStartTime);
-      writer = new feGEMModuleWriter((double)RunStartTime);
+      writer->SetStartTime((double)RunStartTime);
+      writer->SetRunNumber(runinfo->fRunNo);
       if (fTrace)
          printf("feGEMModule::BeginRun, run %d, file %s\n", runinfo->fRunNo, runinfo->fFileName.c_str());
     }

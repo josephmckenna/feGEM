@@ -84,13 +84,12 @@ TStoreGEMData<T>::TStoreGEMData()
 template <class T>
 void TStoreGEMData<T>::Set(const GEMDATA<T>* gemdata,const int BlockSize,
     const uint16_t _TimestampEndianness, const uint16_t _DataEndianness,
-    const uint32_t _MIDASTime, const double RunTimeOffset)
+    const uint32_t _MIDASTime, const double RunTimeOffset, const int _runNumber)
 {
     RawLabVIEWtimestamp = gemdata->timestamp;
     //Please check this calculation
     RawLabVIEWAsUNIXTime  = gemdata->GetUnixTimestamp(_TimestampEndianness);
        //Really, check this fraction calculation
-       
     double fraction = (double) gemdata->GetLabVIEWFineTime(_TimestampEndianness)/(double)((uint64_t)-1);
     assert(fraction<1);
     RawLabVIEWAsUNIXTime += fraction;
@@ -98,6 +97,7 @@ void TStoreGEMData<T>::Set(const GEMDATA<T>* gemdata,const int BlockSize,
     DataEndianness      = _DataEndianness;
     MIDASTime           = _MIDASTime;
     //std::cout<<"MIDAS:"<< MIDASTime;
+    runNumber           = _runNumber;
     RunTime             = RawLabVIEWAsUNIXTime - RunTimeOffset;
     //std::cout<<"RunTime"<<RunTime<<std::endl;
     data.clear();

@@ -51,20 +51,23 @@ template <class T>
 class TStoreGEMData: public TObject
 {
     private:
+       //Variable order hasn't been memory layout optimised
        TLVTimestamp RawLabVIEWtimestamp;
        double RawLabVIEWAsUNIXTime;
        uint16_t TimestampEndianness;
        uint16_t DataEndianness;
        uint32_t MIDASTime;
+       int runNumber;
        double RunTime;
        std::vector<T> data;
     public:
     TStoreGEMData();
     void Set(const GEMDATA<T>* gemdata,const int BlockSize,
        const uint16_t _TimestampEndianness, const uint16_t _DataEndianness,
-       const uint32_t _MIDASTime, const double _RunTime);
+       const uint32_t _MIDASTime, const double _RunTime, const int runNumber);
     double GetLVTimestamp() const { return RawLabVIEWAsUNIXTime; }
     double GetRunTime() const { return RunTime; }
+    int GetRunNumber() const { return runNumber; }
     T GetArrayEntry(int i) const { return data.at(i); }
     virtual ~TStoreGEMData();
     ClassDef(TStoreGEMData<T>,1);
