@@ -127,9 +127,9 @@ void PeriodicityManager::UpdatePerodicity()
 
 void PeriodicityManager::ProcessMessage(GEMBANK<char>* bank)
 {
-  std::cout<<"PROCESS:"<<(char*)&(bank->DATA[0].DATA)<<std::endl;
-   if ((strncmp((char*)&(bank->DATA[0].DATA),"New labview connection from",27)==0) ||
-       (strncmp((char*)&(bank->DATA[0].DATA),"New python connection from",26)==0))
+  std::cout<<"PROCESS:"<<(char*)&(bank->GetDataEntry(0)->DATA)<<std::endl;
+   if ((strncmp((char*)&(bank->GetDataEntry(0)->DATA),"New labview connection from",27)==0) ||
+       (strncmp((char*)&(bank->GetDataEntry(0)->DATA),"New python connection from",26)==0))
    {
       size_t NameLength=1023;
       char ProgramName[NameLength+1];
@@ -137,7 +137,7 @@ void PeriodicityManager::ProcessMessage(GEMBANK<char>* bank)
       // trim at 'NameLength' from above
       if (bank->BlockSize-16<NameLength)
          NameLength=bank->BlockSize-16;
-      snprintf(ProgramName,NameLength,"%s",(char*)&(bank->DATA[0].DATA));
+      snprintf(ProgramName,NameLength,"%s",(char*)&(bank->GetDataEntry(0)->DATA));
       AddRemoteCaller(ProgramName);
       UpdatePerodicity();
    }

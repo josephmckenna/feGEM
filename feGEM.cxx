@@ -217,16 +217,16 @@ void feGEMClass::HandleStrArrayBank(GEMBANK<char>* bank,const char* hostname)
       std::vector<std::string> array;
       
       bool last_char_was_null = true;
-      uint32_t entries = bank->BlockSize - bank->DATA[0].GetHeaderSize();
+      uint32_t entries = bank->BlockSize - bank->GetDataEntry(0)->GetHeaderSize();
       
       for (uint32_t i=0; i<entries; i++)
       {
-         if (last_char_was_null && bank->DATA[0].DATA[i])
+         if (last_char_was_null && bank->GetDataEntry(0)->DATA[i])
          {
-            array.push_back(&(bank->DATA[0].DATA[i]));
+            array.push_back(&(bank->GetDataEntry(0)->DATA[i]));
             last_char_was_null = false;
          }
-         if (!bank->DATA[0].DATA[i])
+         if (!bank->GetDataEntry(0)->DATA[i])
          {
             last_char_was_null = true;
          }
@@ -269,7 +269,7 @@ void feGEMClass::HandleStrBank(GEMBANK<char>* bank,const char* hostname)
    else if (strncmp(bank->NAME.VARNAME,"TALK",4)==0)
    {
       bank->print();
-      fMfe->Msg(MTALK, fEq->fName.c_str(), (char*)bank->DATA->DATA);
+      fMfe->Msg(MTALK, fEq->fName.c_str(), (char*)bank->GetDataEntry(0)->DATA);
       //if (strncmp(bank->NAME.VARCATEGORY,"THISHOST",8)==0)
       //{
       periodicity.ProcessMessage(bank);
@@ -278,8 +278,8 @@ void feGEMClass::HandleStrBank(GEMBANK<char>* bank,const char* hostname)
    }
    else if (strncmp(bank->NAME.VARCATEGORY,"CLIENT_INFO",14)==0)
    {
-      std::cout<<"Writing \""<<bank->DATA[0].DATA<<"\" into "<<bank->NAME.VARNAME<< " in equipment settings"<<std::endl;
-      fEq->fOdbEqSettings->WS(bank->NAME.VARNAME, bank->DATA[0].DATA);
+      std::cout<<"Writing \""<<bank->GetDataEntry(0)->DATA<<"\" into "<<bank->NAME.VARNAME<< " in equipment settings"<<std::endl;
+      fEq->fOdbEqSettings->WS(bank->NAME.VARNAME, bank->GetDataEntry(0)->DATA);
       return;
    }
    else if (strncmp(bank->NAME.VARCATEGORY,"SETTINGS_FILE",13)==0)

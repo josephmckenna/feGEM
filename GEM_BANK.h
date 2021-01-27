@@ -162,16 +162,18 @@ class BANK_TITLE {
       printf("  Variable:%.16s/%.16s\n",GetCategoryName().c_str(),GetVariableName().c_str());
       printf("  EquipmentType:%.32s\n",GetEquipmentType().c_str());
    }
-   std::string SanitiseBankString(const char* input, int assert_size=0) const
+   const std::string SanitiseBankString(const char* input, int assert_size=0) const
    {
       //std::cout<<input;
       const int input_size=strlen(input);
       int output_size=input_size;
       if (assert_size && assert_size < input_size)
          output_size=assert_size;
-      std::string output;
-      output.resize(output_size);
-
+      char output[output_size];
+      //Clean all output chars NULL to start
+      for (int i = 0; i<output_size; i++)
+         output[i]=0;
+      
       int i,j;
       for (i = 0, j = 0; i<input_size; i++,j++)
       {
@@ -188,14 +190,15 @@ class BANK_TITLE {
       if (assert_size)
          output[assert_size]=0;
       //std::cout<<output.c_str()<<"|"<<output.size()<<std::endl;
-      return output;
+      std::string returnstring(output);
+      return returnstring;
    }  
 
-   std::string GetBANK() const          { return SanitiseBankString(BANK,4);                              }
-   std::string GetType() const          { return SanitiseBankString(DATATYPE,4);                          }
-   std::string GetCategoryName() const  { return SanitiseBankString(VARCATEGORY,sizeof(VARCATEGORY));     }
-   std::string GetVariableName() const  { return SanitiseBankString(VARNAME,sizeof(VARNAME));             }
-   std::string GetEquipmentType() const { return SanitiseBankString(EquipmentType,sizeof(EquipmentType)); }
+   const std::string GetBANK() const          { return SanitiseBankString(BANK,4);                              }
+   const std::string GetType() const          { return SanitiseBankString(DATATYPE,4);                          }
+   const std::string GetCategoryName() const  { return SanitiseBankString(VARCATEGORY,sizeof(VARCATEGORY));     }
+   const std::string GetVariableName() const  { return SanitiseBankString(VARNAME,sizeof(VARNAME));             }
+   const std::string GetEquipmentType() const { return SanitiseBankString(EquipmentType,sizeof(EquipmentType)); }
    
 };
 static_assert(sizeof(BANK_TITLE)==72,"BANK_TITLE must be 72 bytes... compiler issues likely");

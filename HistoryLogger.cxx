@@ -89,6 +89,8 @@ void HistoryVariable::BuildCPUMEMHistoryPlot(const GEMBANK<T>* GEM_bank, TMFE* m
 template<typename T>
 HistoryVariable::HistoryVariable(const GEMBANK<T>* GEM_bank, TMFE* mfe,TMFeEquipment* eq )
 {
+   AddHostnameToDescription = false;
+   
    fCategory=GEM_bank->GetCategoryName();
    fVarName=GEM_bank->GetVariableName();
    if (GEM_bank->HistoryPeriod!=65535)
@@ -102,8 +104,11 @@ HistoryVariable::HistoryVariable(const GEMBANK<T>* GEM_bank, TMFE* mfe,TMFeEquip
    MVOdb* OdbEq = NULL;
    if (strncmp(GEM_bank->GetCategoryName().c_str(),"THISHOST",8)==0)
    {
+      AddHostnameToDescription = true;
       std::cout<<"Build THISHOST"<<std::endl;
       OdbEq = mfe->fOdbRoot->Chdir((std::string("Equipment/") + eq->fName).c_str(), true);
+      EquipmentName = eq->fName;
+
       if (strncmp(GEM_bank->GetVariableName().c_str(),"CPUMEM",6)==0)
       {
          std::cout<<"Build CPUMEM"<<std::endl;
@@ -114,6 +119,7 @@ HistoryVariable::HistoryVariable(const GEMBANK<T>* GEM_bank, TMFE* mfe,TMFeEquip
    else
    {
       OdbEq = mfe->fOdbRoot->Chdir((std::string("Equipment/") + fCategory).c_str(), true);
+      EquipmentName = fCategory;
       //fEq = new TMFeEquipment(mfe,fCategory.c_str(),eq->fCommon);
       //fEq->Init();
    }
@@ -131,8 +137,15 @@ bool HistoryVariable::IsMatch(const GEMBANK<T>* GEM_bank)
 }
 
 template<typename T>
-void HistoryVariable::Update(const GEMBANK<T>* GEM_bank)
+void HistoryVariable::Update(GEMBANK<T>* GEM_bank)
 {
+   if (AddHostnameToDescription)
+   {
+      assert(EquipmentName.size() < 32);
+      assert(strncmp(GEM_bank->GetCategoryName().c_str(),"THISHOST",8)==0);
+      //BANK has no information about which host it came from (THISHOST)... use the EquipmentType (32 char description) to set it
+      strcpy(GEM_bank->NAME.EquipmentType,EquipmentName.c_str());
+   }
    if (!UpdateFrequency)
       return;
    
@@ -148,13 +161,13 @@ void HistoryVariable::Update(const GEMBANK<T>* GEM_bank)
    WriteODB(array);
 }
 
-template void HistoryVariable::Update(const GEMBANK<double>* GEM_bank);
-template void HistoryVariable::Update(const GEMBANK<bool>* GEM_bank);
-template void HistoryVariable::Update(const GEMBANK<float>* GEM_bank);
-template void HistoryVariable::Update(const GEMBANK<int>* GEM_bank);
-template void HistoryVariable::Update(const GEMBANK<unsigned int>* GEM_bank);
-template void HistoryVariable::Update(const GEMBANK<unsigned short>* GEM_bank);
-template void HistoryVariable::Update(const GEMBANK<char>* GEM_bank);
+template void HistoryVariable::Update(GEMBANK<double>* GEM_bank);
+template void HistoryVariable::Update(GEMBANK<bool>* GEM_bank);
+template void HistoryVariable::Update(GEMBANK<float>* GEM_bank);
+template void HistoryVariable::Update(GEMBANK<int>* GEM_bank);
+template void HistoryVariable::Update(GEMBANK<unsigned int>* GEM_bank);
+template void HistoryVariable::Update(GEMBANK<unsigned short>* GEM_bank);
+template void HistoryVariable::Update(GEMBANK<char>* GEM_bank);
 
 //--------------------------------------------------
 // History Logger Class

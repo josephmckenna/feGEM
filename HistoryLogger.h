@@ -16,12 +16,15 @@ class HistoryVariable
    std::string fVarName;
    int64_t fLastUpdate; //Converted to UXIXTime
    int UpdateFrequency;
-   MVOdb* fOdbEqVariables; 
+   MVOdb* fOdbEqVariables;
+   
+   bool AddHostnameToDescription;
+   std::string EquipmentName;
    //TMFeEquipment* fEq;
    template<typename T> HistoryVariable(const GEMBANK<T>* gembank, TMFE* mfe,TMFeEquipment* eq );
    template<typename T> void BuildCPUMEMHistoryPlot(const GEMBANK<T>* GEM_bank, TMFE* mfe,TMFeEquipment* eq );
    template<typename T> bool IsMatch(const GEMBANK<T>* gembank);
-   template<typename T> void Update(const GEMBANK<T>* gembank);
+   template<typename T> void Update(GEMBANK<T>* gembank);
    private:
    void WriteODB(std::vector<bool>& data)
    {
@@ -76,7 +79,7 @@ public:
    template<typename T>
    HistoryVariable* Find(const GEMBANK<T>* gembank, bool AddIfNotFound);
    template<typename T>
-   void Update(const GEMBANK<T>* gembank)
+   void Update(GEMBANK<T>* gembank)
    {
       HistoryVariable* UpdateThis=Find(gembank,true);
       UpdateThis->Update(gembank);
