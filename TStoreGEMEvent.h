@@ -64,6 +64,8 @@ class TStoreGEMData: public TObject
        const uint16_t _TimestampEndianness, const uint16_t _DataEndianness,
        const uint32_t _MIDASTime, const double _RunTime);
     double GetLVTimestamp() const { return RawLabVIEWAsUNIXTime; }
+    double GetRunTime() const { return RunTime; }
+    T GetArrayEntry(int i) const { return data.at(i); }
     virtual ~TStoreGEMData();
     ClassDef(TStoreGEMData<T>,1);
 };

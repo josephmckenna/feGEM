@@ -149,8 +149,8 @@ private:
 public:
    feGEMModuleFlags* fFlags;
    bool fTrace = false;
-   feGEMModuleWriter writer;
-   
+   feGEMModuleWriter* writer;
+   uint32_t RunStartTime;
    feGEMModule(TARunInfo* runinfo, feGEMModuleFlags* flags)
       : TARunObject(runinfo), fFlags(flags)
    {
@@ -169,6 +169,8 @@ public:
    {
       runinfo->fRoot->fOutputFile->cd();
       gDirectory->mkdir("feGEM")->cd();
+      runinfo->fOdb->RU32("/Runinfo/Start time binary",&RunStartTime);
+      writer = new feGEMModuleWriter((double)RunStartTime);
       if (fTrace)
          printf("feGEMModule::BeginRun, run %d, file %s\n", runinfo->fRunNo, runinfo->fFileName.c_str());
     }
@@ -204,7 +206,7 @@ public:
          for (int i=0; i<array->data->NumberOfEntries; i++)
          {
             GEMBANK<void*>* bank = (GEMBANK<void*>*)dataptr;
-            writer.SaveToTree(runinfo, bank, MIDAS_TIME);
+            writer->SaveToTree(runinfo, bank, MIDAS_TIME);
             //PrintGEMBANK(bank);
             dataptr += bank->GetTotalSize();
          }
@@ -215,7 +217,7 @@ public:
       if (gembank)
       {
          GEMBANK<void*>* bank = gembank->data;
-         writer.SaveToTree(runinfo, bank, gembank->MIDAS_TIME);
+         writer->SaveToTree(runinfo, bank, gembank->MIDAS_TIME);
          //PrintGEMBANK(bank);
       }
       

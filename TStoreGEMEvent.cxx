@@ -84,7 +84,7 @@ TStoreGEMData<T>::TStoreGEMData()
 template <class T>
 void TStoreGEMData<T>::Set(const GEMDATA<T>* gemdata,const int BlockSize,
     const uint16_t _TimestampEndianness, const uint16_t _DataEndianness,
-    const uint32_t _MIDASTime, const double _RunTime)
+    const uint32_t _MIDASTime, const double RunTimeOffset)
 {
     RawLabVIEWtimestamp = gemdata->timestamp;
     //Please check this calculation
@@ -98,7 +98,7 @@ void TStoreGEMData<T>::Set(const GEMDATA<T>* gemdata,const int BlockSize,
     DataEndianness      = _DataEndianness;
     MIDASTime           = _MIDASTime;
     //std::cout<<"MIDAS:"<< MIDASTime;
-    RunTime             = _RunTime;
+    RunTime             = RawLabVIEWAsUNIXTime - RunTimeOffset;
     //std::cout<<"RunTime"<<RunTime<<std::endl;
     data.clear();
     int entries=gemdata->GetEntries(BlockSize);
