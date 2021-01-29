@@ -230,7 +230,7 @@ public:
       GEMBANKARRAY_Flow* array = flow->Find<GEMBANKARRAY_Flow>();
       if (array)
       {
-         array->data->print();
+         //array->data->print();
          uint32_t MIDAS_TIME = array->MIDAS_TIME;
          char* dataptr = (char*) &array->data->DATA[0];
          for (int i=0; i<array->data->NumberOfEntries; i++)
@@ -240,7 +240,7 @@ public:
             //PrintGEMBANK(bank);
             dataptr += bank->GetTotalSize();
          }
-         std::cout<<"============================="<<std::endl;
+         //std::cout<<"============================="<<std::endl;
       }   
       GEMBANK_Flow* gembank = flow->Find<GEMBANK_Flow>();
 
@@ -260,7 +260,7 @@ public:
       me->FindAllBanks();
       {
          const TMBank* MIDAS_BANK = me->FindBank("GEM1");
-         std::cout<<me->BankListToString()<<std::endl;
+         //std::cout<<me->BankListToString()<<std::endl;
          if (MIDAS_BANK)
          {
             nGEMBanks++;

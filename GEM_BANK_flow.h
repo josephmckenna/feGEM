@@ -25,7 +25,7 @@ class GEMBANKARRAY_Flow: public TAFlowEvent
        : TAFlowEvent(flow)
   {
       MIDAS_TIME=_MIDAS_TIME;
-      std::cout<<"Bank len:"<<BankLen<<std::endl;
+      //std::cout<<"Bank len:"<<BankLen<<std::endl;
       data = (GEMBANKARRAY*)malloc(BankLen);
       memcpy(data,e,BankLen);
       assert(data->GetTotalSize()==BankLen);
