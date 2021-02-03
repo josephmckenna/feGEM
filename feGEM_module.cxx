@@ -40,7 +40,7 @@ class feGEMModuleWriter
          
          b->SetAddress(&data);
 
-         for (int i=0; i<bank->NumberOfEntries; i++)
+         for (uint32_t i=0; i<bank->NumberOfEntries; i++)
          {
             data->Set(
                bank->GetDataEntry(i),
@@ -233,7 +233,7 @@ public:
          //array->data->print();
          uint32_t MIDAS_TIME = array->MIDAS_TIME;
          char* dataptr = (char*) &array->data->DATA[0];
-         for (int i=0; i<array->data->NumberOfEntries; i++)
+         for (uint32_t i=0; i<array->data->NumberOfEntries; i++)
          {
             GEMBANK<void*>* bank = (GEMBANK<void*>*)dataptr;
             writer->SaveToTree(runinfo, bank, MIDAS_TIME);
@@ -250,7 +250,12 @@ public:
          writer->SaveToTree(runinfo, bank, gembank->MIDAS_TIME);
          //PrintGEMBANK(bank);
       }
-      
+      if (!array && !gembank)
+      {
+#ifdef MANALYZER_PROFILER
+         *flags |= TAFlag_SKIP_PROFILE;
+#endif
+      }
       return flow; 
    }
 
@@ -317,6 +322,12 @@ public:
                }
             } //if GEA1
          } //if (MIDAS_BANK)
+         else
+         { //No work done.. skip profiler
+#ifdef MANALYZER_PROFILER
+            *flags |= TAFlag_SKIP_PROFILE;
+#endif
+         }
       }
       return flow;
    }

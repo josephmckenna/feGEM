@@ -315,7 +315,7 @@ class GEMBANK {
 static_assert(sizeof(GEMBANK<void*>)==88,"BANKBANK must be 88 bytes... compiler issues likely");
 
 //Call the correct print based on type
-static void PrintGEMBANK(GEMBANK<void*>* bank)
+static inline void PrintGEMBANK(GEMBANK<void*>* bank)
 {
    if (strncmp(bank->NAME.DATATYPE,"DBL",3)==0) 
       ((GEMBANK<double>*)bank)->print();

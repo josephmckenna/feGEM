@@ -21,7 +21,7 @@ class GEMBANKARRAY_Flow: public TAFlowEvent
    GEMBANKARRAY* data;
    uint32_t MIDAS_TIME;
     public:
-  GEMBANKARRAY_Flow(TAFlowEvent* flow, GEMBANKARRAY* e, int BankLen, uint32_t _MIDAS_TIME)
+  GEMBANKARRAY_Flow(TAFlowEvent* flow, GEMBANKARRAY* e, uint32_t BankLen, uint32_t _MIDAS_TIME)
        : TAFlowEvent(flow)
   {
       MIDAS_TIME=_MIDAS_TIME;
