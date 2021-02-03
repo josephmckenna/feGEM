@@ -100,6 +100,13 @@ class feGEMModuleWriter
       feGEMModuleWriter()
       {
       }
+      void WriteTrees(TARunInfo* runinfo)
+      {
+         runinfo->fRoot->fOutputFile->cd("feGEM");
+         for (TTree* t: datatrees)
+            t->Write();
+         headertree->Write();
+      }
       void SetStartTime(double offset)
       {
          RunTimeOffset = offset;
@@ -209,6 +216,7 @@ public:
    {
       if (fTrace)
          printf("feGEMModule::EndRun, run %d\n", runinfo->fRunNo);
+      writer->WriteTrees(runinfo);
    }
    
    void PauseRun(TARunInfo* runinfo)
