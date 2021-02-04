@@ -26,7 +26,7 @@ public:
 class feGEMModuleWriter
 {
    private:
-      TTree* headertree;
+      TTree* headertree = NULL;
       TBranch* headerbranch;
       std::vector<TTree*> datatrees;
       std::vector<TBranch*> data;
@@ -105,7 +105,8 @@ class feGEMModuleWriter
          runinfo->fRoot->fOutputFile->cd("feGEM");
          for (TTree* t: datatrees)
             t->Write();
-         headertree->Write();
+         if (headertree)
+            headertree->Write();
       }
       void SetStartTime(double offset)
       {
