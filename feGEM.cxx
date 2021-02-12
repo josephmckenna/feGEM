@@ -210,6 +210,18 @@ void feGEMClass::HandleCommandBank(const GEMDATA<char>* bank,const char* command
    return;
 }
 
+void feGEMClass::HandleFileBank(GEMBANK<char>* bank,const char* hostname)
+{
+   //LabVIEW code is setup so that only one file is sent in a bank...
+   
+   std::cout<<"File recieved"<<std::endl;
+   const GEMDATA<char>* gem_data = bank->GetFirstDataEntry();
+   const char* file_data = &gem_data->DATA[0];
+   std::cout<<file_data<<std::endl;
+   return;     
+  
+}
+
 void feGEMClass::HandleStrArrayBank(GEMBANK<char>* bank)
 {
    if (strncmp(bank->NAME.VARCATEGORY,"CLIENT_INFO",14)==0)
@@ -374,6 +386,10 @@ void feGEMClass::LogBank(const char* buf, const char* hostname)
    } else if (strncmp(ThisBank->NAME.DATATYPE,"STR",3)==0) {
       GEMBANK<char>* bank=(GEMBANK<char>*)buf;
       HandleStrBank(bank,hostname);
+      return;
+   } else if (strncmp(ThisBank->NAME.DATATYPE,"FILE",4)==0) {
+      GEMBANK<char>* bank=(GEMBANK<char>*)buf;
+      HandleFileBank(bank,hostname);
       return;
    } else {
       std::cout<<"Unknown bank data type... "<<std::endl;
