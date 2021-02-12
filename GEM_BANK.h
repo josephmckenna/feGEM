@@ -93,7 +93,7 @@ class GEMDATA {
       if (IsString)
       {
          std::cout<<"DATA:";
-         for (int i=0; i<data_points; i++)
+         for (uint32_t i=0; i<data_points; i++)
          {
             if (DATA[i])
                std::cout<<DATA[i];
@@ -105,12 +105,12 @@ class GEMDATA {
       }
       if (DataEndianness != LittleEndian)
       {
-         for (int i=0; i<data_points; i++)
+         for (uint32_t i=0; i<data_points; i++)
             std::cout<<"   DATA["<<i<<"]="<<change_endian(DATA[i])<<std::endl;
       }
       else
       {
-         for (int i=0; i<data_points; i++)
+         for (uint32_t i=0; i<data_points; i++)
          {
             if (DATA[i])
                std::cout<<"   DATA["<<i<<"]="<<DATA[i]<<std::endl;
@@ -248,7 +248,7 @@ class GEMBANK {
       bool IsString=false;
       if (strncmp(NAME.DATATYPE,"STR",3)==0)
          IsString=true;
-      for (int i=0; i<NumberOfEntries; i++)
+      for (uint32_t i=0; i<NumberOfEntries; i++)
       {
          const GEMDATA<T>* data=GetDataEntry(i);
          data->print(BlockSize, TimestampEndianness,DataEndianness,IsString);
