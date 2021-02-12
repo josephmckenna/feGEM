@@ -69,10 +69,36 @@ class TStoreGEMData: public TObject
     double GetRunTime() const { return RunTime; }
     int GetRunNumber() const { return runNumber; }
     T GetArrayEntry(int i) const { return data.at(i); }
+    const std::vector<T>& GetData() const { return data; }
     virtual ~TStoreGEMData();
     ClassDef(TStoreGEMData<T>,1);
 };
 
-
+class TStoreGEMFile: public TStoreGEMData<char>
+{
+   private:
+      std::string filename;
+      std::string filepath;
+      std::string MD5;
+   public:
+   TStoreGEMFile();
+   void SetFileName(const char* _filename, const char* _filepath, const char* _MD5)
+   {
+      filename = _filename;
+      filepath = _filepath;
+      MD5      = _MD5;
+   }
+   std::string GetFileName() { return filename; }
+   std::string GetFilePath() { return filepath; }
+   std::string GetFileMD5()  { return MD5;      }
+   void PrintFileInfo()
+   {
+      std::cout << "filename: " << filename << std::endl;
+      std::cout << "filepath: " << filepath << std::endl;
+      std::cout << "MD5:"       << MD5 << std::endl;
+   }
+   virtual ~TStoreGEMFile();
+   ClassDef(TStoreGEMFile,1);
+};
 
 #endif

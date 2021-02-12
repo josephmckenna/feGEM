@@ -117,9 +117,6 @@ TStoreGEMData<T>::~TStoreGEMData()
     data.clear();
 }
 
-//Define all valid data types for TStoreGEMData
-
-
 ClassImp(TStoreGEMData<double>)
 ClassImp(TStoreGEMData<float>)
 ClassImp(TStoreGEMData<bool>)
@@ -128,6 +125,22 @@ ClassImp(TStoreGEMData<uint32_t>)
 ClassImp(TStoreGEMData<uint16_t>)
 ClassImp(TStoreGEMData<char>)
 
+TStoreGEMFile::TStoreGEMFile(): TStoreGEMData<char>()
+{
+
+}
+
+TStoreGEMFile::~TStoreGEMFile()
+{
+ 
+}
+
+ClassImp(TStoreGEMFile);
+
+//Define all valid data types for TStoreGEMData
+
+
+
 template class TStoreGEMData<double>;
 template class TStoreGEMData<float>;
 template class TStoreGEMData<bool>;
@@ -135,4 +148,5 @@ template class TStoreGEMData<int32_t>;
 template class TStoreGEMData<uint32_t>;
 template class TStoreGEMData<uint16_t>;
 template class TStoreGEMData<char>;
+
 

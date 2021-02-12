@@ -26,6 +26,7 @@ public:
 class feGEMModuleWriter
 {
    private:
+      
       TTree* headertree = NULL;
       TBranch* headerbranch;
       std::vector<TTree*> datatrees;
@@ -56,6 +57,41 @@ class feGEMModuleWriter
          }
          delete data;
       }
+      template <typename T> void BranchTreeFromFile(
+         TTree* t, 
+         TBranch* b, 
+         GEMBANK<T>* bank, 
+         uint32_t MIDAS_TIME, 
+         const std::string& name,
+         const std::string& filename,
+         const std::string& filepath,
+         const std::string& fileMD5)
+      {
+         //TStoreGEMEventHeader GEMEvents;
+         TStoreGEMFile* data = new TStoreGEMFile();
+         
+         b->SetAddress(&data);
+         // Entries inside a bank must all be the same size... the DataPacker should 
+         // never be sending more than one file (if it does, its been edited and is now broken)
+         assert(bank->NumberOfEntries == 1);
+         //Regardless, lets start looping
+         for (uint32_t i=0; i<bank->NumberOfEntries; i++)
+         {
+            data->Set(
+               bank->GetDataEntry(i),
+               bank->BlockSize,
+               bank->TimestampEndianness,
+               bank->DataEndianness,
+               MIDAS_TIME,
+               RunTimeOffset,
+               runNumber
+               );
+            data->SetFileName(filename.c_str(), filepath.c_str(), fileMD5.c_str());
+            //gemdata->print(BlockSize, TimestampEndianness,DataEndianness,IsString);
+            t->Fill();
+         }
+         delete data;
+      }
       template<typename T>
       std::pair<TTree*,TBranch*> FindOrCreateTree(TARunInfo* runinfo, GEMBANK<T>* bank, const std::string& CombinedName)
       {
@@ -72,9 +108,17 @@ class feGEMModuleWriter
          }
          runinfo->fRoot->fOutputFile->cd("feGEM");
          TTree* currentTree = new TTree(CombinedName.c_str(),"feGEM Event Tree");
-         TStoreGEMData<T> event;
-
-         std::string BranchName = "TStoreGEMData<";
+         TBranch* branch;
+         if (strncmp(CombinedName.c_str(),"FILE:",5) == 0 )
+         {
+            TStoreGEMFile event;
+            std::string BranchName = "TStoreGEMFile<char>";
+            branch = currentTree->Branch(BranchName.c_str(),"TStoreGEMData",&event);
+         }
+         else
+         {
+            TStoreGEMData<T> event;
+            std::string BranchName = "TStoreGEMData<";
             if (typeid(T) == typeid(double))
                BranchName += "double>";
             else if (typeid(T) == typeid(float))
@@ -91,7 +135,8 @@ class feGEMModuleWriter
                BranchName += "char>";
             else
                BranchName += "unknown>";
-         TBranch* branch = currentTree->Branch(BranchName.c_str(),"TStoreGEMData",&event);
+            branch = currentTree->Branch(BranchName.c_str(),"TStoreGEMData",&event);
+         }
          datatrees.push_back(currentTree);
          data.push_back(branch);
          return {currentTree, branch};
@@ -157,7 +202,7 @@ class feGEMModuleWriter
          }
          else if (strncmp(bank->NAME.DATATYPE,"STRA",4)==0)
          {
-            std::cout<<"Writing of string array probably wobbly"<<std::endl;
+            std::cout<<"Writing of string array probably wobbly ("<<CombinedName<<")"<<std::endl;
             std::pair<TTree*,TBranch*> t = FindOrCreateTree(runinfo, (GEMBANK<char>*)bank, CombinedName);
             BranchTreeFromData(t.first, t.second, (GEMBANK<char>*)bank, MIDAS_TIME, CombinedName);
          }
@@ -166,6 +211,37 @@ class feGEMModuleWriter
             std::pair<TTree*,TBranch*> t = FindOrCreateTree(runinfo, (GEMBANK<char>*)bank, CombinedName);
             BranchTreeFromData(t.first, t.second, (GEMBANK<char>*)bank, MIDAS_TIME, CombinedName);
          }
+         else if (strncmp(bank->NAME.DATATYPE,"FILE",4)==0)
+         {
+            std::cout << "File detected"<<std::endl;
+            std::string filename, filepath, fileMD5;
+            char* FILE = nullptr;
+            char* d=(char*)bank->GetDataEntry(0)->DATA;
+            //Set limit many items to look for in file header
+            for (int i =0; i <10; i++ )
+            {
+               if (strncmp(d,"Filename:",9)==0)
+                  filename=d+9;
+               else if (strncmp(d,"FilePath:",9)==0)
+                  filepath=d+9;
+               else if (strncmp(d,"MD5:",4)==0)
+                  fileMD5=d+4;
+               else if (strncmp(d,"FILE:",5)==0)
+                  FILE=d+5;
+               //Do we have all args
+               if (filename.size() && filepath.size() && fileMD5.size() && FILE)
+                  break;
+               while (*d != 0)
+                  d++;
+               d++;
+            }
+            std::cout << "\tFilename: " << filename << std::endl;
+            std::cout << "\tFilePath: " << filepath << std::endl;
+            std::cout << "\tMD5: "      << fileMD5  << std::endl;
+            CombinedName = "FILE:" + CombinedName + "\\" + filename;
+            std::pair<TTree*,TBranch*> t = FindOrCreateTree(runinfo, (GEMBANK<char>*)bank, CombinedName);
+            BranchTreeFromFile(t.first, t.second, (GEMBANK<char>*)bank, MIDAS_TIME, CombinedName, filename, filepath, fileMD5);
+         } 
          else
          {
             std::cout<<"Unknown bank data type... "<<std::endl;
