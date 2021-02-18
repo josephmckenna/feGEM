@@ -37,6 +37,12 @@ public:
    int fDebugMode;
 
    std::string thisHostname;
+   
+   //Elog posting settings
+   std::string elogHost = "";
+   int fMaxElogPostSize; //Used to put a safetly limit on the size of an elog post
+   
+   std::chrono::time_point<std::chrono::system_clock> LastStatusUpdate;
 
    //Periodic task query items (sould only be send from worker class... not yet limited)
    RunStatusType RunStatus;
@@ -53,7 +59,6 @@ public:
    // JSON reply manager
    MessageHandler message;
 
-   
    HistoryLogger logger;
    feGEMClass(TMFE* mfe, TMFeEquipment* eq , AllowedHosts* hosts, int type, int debugMode = 0 ):
       feGEMClassType(type),
@@ -69,9 +74,11 @@ public:
       thisHostname = hostname;
       //Hostname must be known!
       assert(thisHostname.size()>0);
+      LastStatusUpdate = std::chrono::high_resolution_clock::now();
    }
    ~feGEMClass() // dtor
    {
+      SetFEStatus(-1);
       TCP_thread.join();
       if (fEventBuf) {
          free(fEventBuf);
@@ -89,11 +96,12 @@ public:
    void HandleFileBank(GEMBANK<char>* bank,const char* hostname);
    void HandleStrArrayBank(GEMBANK<char>* bank);
    void HandleCommandBank(const GEMDATA<char>* bank,const char* command,const char* hostname);
+   void PostElog(GEMBANK<char>* bank, const char* hostname);
    void LogBank(const char* buf,const char* hostname);
    int HandleBankArray(const char * ptr,const char* hostname);
    int HandleBank(const char * ptr,const char* hostname);
 
-   void SetFEStatus();
+   void SetFEStatus(int seconds_since_last_post = 0);
 
    void HandlePeriodic() {};
    void ServeHost();

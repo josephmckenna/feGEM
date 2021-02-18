@@ -99,7 +99,7 @@ HistoryVariable::HistoryVariable(const GEMBANK<T>* GEM_bank, TMFE* mfe,TMFeEquip
       UpdateFrequency=gHistoryPeriod;
    if (!UpdateFrequency)
       return;
-   fLastUpdate=0;
+   fLastUpdate = 0;
    //Prepare ODB entry for variable
    MVOdb* OdbEq = NULL;
    if (strncmp(GEM_bank->GetCategoryName().c_str(),"THISHOST",8)==0)
@@ -147,14 +147,21 @@ void HistoryVariable::Update(GEMBANK<T>* GEM_bank)
    
    const GEMDATA<T>* data=GEM_bank->GetLastDataEntry();
    //std::cout <<data->GetUnixTimestamp(GEM_bank->TimestampEndianness) <<" <  " <<fLastUpdate + UpdateFrequency <<std::endl;
-   if (data->GetUnixTimestamp(GEM_bank->TimestampEndianness) < fLastUpdate + UpdateFrequency)
+   uint64_t BankTimeStamp = data->GetUnixTimestamp(GEM_bank->TimestampEndianness);
+   const int TimeSinceLastUpdate = BankTimeStamp - fLastUpdate;
+
+   if ( TimeSinceLastUpdate <  UpdateFrequency)
       return;
-   fLastUpdate=data->GetUnixTimestamp(GEM_bank->TimestampEndianness);
+
    const int data_entries=data->GetEntries(GEM_bank->BlockSize);
    std::vector<T> array(data_entries);
    for (int i=0; i<data_entries; i++)
       array[i]=data->DATA[i];
    WriteODB(array);
+
+   fLastUpdate = BankTimeStamp;
+
+    
 }
 
 template void HistoryVariable::Update(GEMBANK<double>* GEM_bank);

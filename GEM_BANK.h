@@ -166,9 +166,9 @@ class BANK_TITLE {
    {
       //std::cout<<input;
       const int input_size=strlen(input);
-      int output_size=input_size;
+      int output_size = input_size + 1;
       if (assert_size && assert_size < input_size)
-         output_size=assert_size;
+         output_size = assert_size;
       char output[output_size];
       //Clean all output chars NULL to start
       for (int i = 0; i<output_size; i++)

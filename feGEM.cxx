@@ -40,10 +40,18 @@ void feGEMClass::HandleEndRun()
    //fEq->SetStatus("Stopped", "#00FF00");
    RunStatus=Stopped;
 }
-void feGEMClass::SetFEStatus()
+void feGEMClass::SetFEStatus(int seconds_since_last_post)
 {
    std::string status = "Rate limit set: " + std::to_string(fEventSize/1000) + "KiB/s";
-   fEq->SetStatus(status.c_str(), "greenLight");
+   //The History logger sets negative time in its deconstructor (to set all status's grey when the frontend closes)
+   if (seconds_since_last_post < 0)
+      fEq->SetStatus(status.c_str(), "mgray");
+   else if (seconds_since_last_post < 100)
+      fEq->SetStatus(status.c_str(), "greenLight");
+   else if ( seconds_since_last_post < 300)
+      fEq->SetStatus(status.c_str(), "yellowLight");
+   else
+      fEq->SetStatus(status.c_str(), "redLight");
 }
 
 void feGEMClass::HandleCommandBank(const GEMDATA<char>* bank,const char* command, const char* hostname)
@@ -294,6 +302,17 @@ void feGEMClass::HandleStrBank(GEMBANK<char>* bank, const char* hostname)
       fEq->fOdbEqSettings->WS(bank->NAME.VARNAME, bank->GetDataEntry(0)->DATA);
       return;
    }
+   else if (strncmp(bank->NAME.VARCATEGORY,"ELOG",4)==0)
+   {
+      if ((int)bank->GetTotalSize()> fMaxElogPostSize)
+      {
+         fMfe->Msg(MTALK,"feGEM:elog","ELOG post too large, increase hard limit in ODB");
+         return;
+      }
+      std::cout<<"Posting elog"<<std::endl;
+      PostElog(bank,hostname);
+      return;
+   }
    else if (strncmp(bank->NAME.VARCATEGORY,"SETTINGS_FILE",13)==0)
    {
       //The settings files doesn't need to go to midas... skip logger.Update
@@ -322,6 +341,79 @@ void feGEMClass::HandleStrBank(GEMBANK<char>* bank, const char* hostname)
       bank->print();
    }
    logger.Update(bank);
+}
+
+void feGEMClass::PostElog(GEMBANK<char>* bank, const char* hostname)
+{
+   if (elogHost.size() == 0)
+   {
+      fMfe->Msg(MTALK,"feGEM:elog","No Host for the elog set... please update ODB");
+      return;
+   }
+   
+   std::cout << "File detected"<<std::endl;
+   std::string ElogType, Encoding, Message;
+   std::vector<std::string> Attribute;
+   char* d=(char*)bank->GetDataEntry(0)->DATA;
+   //Set limit many items to look for in file header
+   for (int i =0; i <10; i++ )
+   {
+      if (strncmp(d,"ELOG_TYPE:",strlen("ELOG_TYPE:"))==0)
+         ElogType = d + strlen("ELOG_TYPE:");
+
+      else if (strncmp(d,"ATTRIBUTE:",strlen("ATTRIBUTE:"))==0)
+         Attribute.push_back(d + strlen("ATTRIBUTE:"));
+
+      else if (strncmp(d,"ELOG_ENCODING:",strlen("ELOG_ENCODING:"))==0)
+         Encoding = d + strlen("ELOG_ENCODING:");
+
+      else if (strncmp(d,"ELOG_MESSAGE:",strlen("ELOG_MESSAGE:"))==0)
+         Message  = d + strlen("ELOG_MESSAGE:");
+
+      //Do we have all args
+      if (ElogType.size() && Encoding.size() && Message.size())
+         break;
+      while (*d != 0)
+         d++;
+      d++;
+   }
+   //Add escaped quote marks for each attribute (we are pipeing this commant through an ssh tunnel)
+   for (std::string &arr: Attribute)
+   {
+      size_t equal_symbol_position = arr.find('=');
+      arr.insert(equal_symbol_position+1,"\\\"");
+      arr.append("\\\"");
+   }
+   
+   
+   std::cout << "\tELOG_TYPE: " << ElogType << std::endl;
+   for (std::string &arr: Attribute)
+      std::cout << "\tATTRIBUE: " << arr << std::endl;
+   std::cout << "\tELOG_ENCODING: " << Encoding << std::endl;
+   std::cout << "\tELOG_MESSAGE: " << Message << std::endl;
+
+   //Send elog:
+   std::string cmd = std::string("ssh -x  ") + elogHost + 
+                     std::string(" ~/packages/elog/elog -h localhost -p 8080 ") + 
+                     std::string(" -l ") + ElogType +
+                     std::string(" -n ") + Encoding +
+                     std::string(" -a Run=") + std::to_string(RUNNO);
+                     for (std::string &att: Attribute)
+                        cmd += std::string(" -a ") + att;
+   std::cout<<"Command:"<<cmd<<std::endl;
+   //snprintf(cmd, 40959, "ssh -x  %s ~/packages/elog/elog -h localhost -p 8080 -l %s -a Run=%d", elogHost.c_str(), ElogType.c_str()  gRunNumber);
+   FILE* fp = popen(cmd.c_str(), "w");
+   if(fp)
+   {
+      //printf("to pipe: %s\n", Message.c_str());
+      fputs(Message.c_str(), fp);
+      pclose(fp);
+   }
+   else
+   {
+      printf("error opening pipe\n");
+   }
+   return;
 }
 
 void feGEMClass::LogBank(const char* buf, const char* hostname)
@@ -626,7 +718,15 @@ void feGEMClass::ServeHost()
    std::chrono::time_point<std::chrono::system_clock> timer_stop=std::chrono::high_resolution_clock::now();
    std::chrono::duration<double, std::milli> handlingtime=timer_stop - timer_start;
    //std::cout<<"["<<fEq->fName.c_str()<<"] Handling time: "<<handlingtime.count()*1000 <<"ms"<<std::endl;
-   printf ("[%s] Handled %c%c%c%c %d banks (%d bytes) in %fms",fEq->fName.c_str(),ptr[0],ptr[1],ptr[2],ptr[3],nbanks,read_status,handlingtime.count());
+   printf ("[%s] Handled %c%c%c%c %d banks (%d bytes) in %fms",
+      fEq->fName.c_str(),
+      ptr[0],
+      ptr[1],
+      ptr[2],
+      ptr[3],
+      nbanks,
+      read_status,
+      handlingtime.count());
    periodicity.AddBanksProcessed(nbanks);
    if (fDebugMode)
       printf(" (debug mode on)");
@@ -646,10 +746,22 @@ void feGEMClass::ServeHost()
    close(new_socket);
    
    shutdown(new_socket,SHUT_RD);
+
+   //Every 30s, Update the frontend status
+   std::chrono::duration<double, std::milli> TimeSinceLastStatusUpdate = LastStatusUpdate - timer_stop;
+   //Update the status less frequently that the actual data
+   if ( TimeSinceLastStatusUpdate.count() > 30 )
+   {
+      SetFEStatus((int)TimeSinceLastStatusUpdate.count());
+      LastStatusUpdate = timer_stop;
+   }
    
    //zmq_send (responder, reply.c_str(), reply.size(), 0);
    if (KillFrontend)
+   {
+      SetFEStatus(-1);
       exit(1);
+   }
    return;
 }
 
@@ -663,6 +775,9 @@ feGEMWorker::feGEMWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts, cons
    fEventSize = 10000;
    fEventBuf  = NULL;
    SetFEStatus();
+   
+   //Default size limit on elog posts is 1MB
+   fMaxElogPostSize = 1000000;
 
    // Creating socket file descriptor 
    server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -717,6 +832,11 @@ void feGEMWorker::Init(MVOdb* supervisor_settings_path)
    SettingsDataBase=new SettingsFileDatabase(SettingsFileDatabasePath.c_str());
 
    fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
+
+   //Get (and set defaults if needed) the elog settings and limits
+   fEq->fOdbEqSettings->RI("elog_post_size_limit",&fMaxElogPostSize, true);
+   fOdbSupervisorSettings->RS("elog_hostname",&elogHost, true);
+
    SetFEStatus();
 
    lastEventSize=fEventSize;
