@@ -16,7 +16,7 @@ MODULES = $(LIB_DIR)/mfe.o
 
 all::feGEM.exe 
 
-feGEM.exe: %.exe: feGEMmain.o %.o GEM_BANK.o MessageHandler.o AllowedHosts.o HistoryLogger.o PeriodicityManager.o SettingsFileDatabase.o
+feGEM.exe: %.exe: feGEMmain.o feGEMClass.o feGEMWorker.o feGEMSupervisor.o GEM_BANK.o MessageHandler.o AllowedHosts.o HistoryLogger.o PeriodicityManager.o SettingsFileDatabase.o
 	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS) -lssl -lcrypto
 
 

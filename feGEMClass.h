@@ -1,3 +1,6 @@
+#ifndef FEGEM_CLASS_
+#define FEGEM_CLASS_
+
 #include <thread>
 
 #include "midas.h"
@@ -60,31 +63,9 @@ public:
    MessageHandler message;
 
    HistoryLogger logger;
-   feGEMClass(TMFE* mfe, TMFeEquipment* eq , AllowedHosts* hosts, int type, int debugMode = 0 ):
-      feGEMClassType(type),
-      periodicity(mfe,eq),
-      message(mfe),
-      logger(mfe,eq)
-   {
-      allowed_hosts = hosts;
-      fDebugMode = debugMode;
-      char hostname[100];
-      gethostname(hostname,100);
-      //Store as std::string in this class
-      thisHostname = hostname;
-      //Hostname must be known!
-      assert(thisHostname.size()>0);
-      LastStatusUpdate = std::chrono::high_resolution_clock::now();
-   }
-   ~feGEMClass() // dtor
-   {
-      SetFEStatus(-1);
-      TCP_thread.join();
-      if (fEventBuf) {
-         free(fEventBuf);
-         fEventBuf = NULL;
-      }
-   }
+   feGEMClass(TMFE* mfe, TMFeEquipment* eq , AllowedHosts* hosts, int type, int debugMode = 0 );
+   ~feGEMClass();
+
    virtual int FindHostInWorkerList(const char* hostname) { assert(0); return -1; };
    virtual uint16_t AssignPortForWorker(uint workerID) { assert(0); return 0; };
    virtual const char* AddNewClient(const char* hostname) { assert(0); return NULL; };
@@ -108,60 +89,4 @@ public:
    void Run();
 };
 
-
-class feGEMWorker :
-   public feGEMClass
-{
-   public:
-   MVOdb* fOdbSupervisorSettings;
-   feGEMWorker(TMFE* mfe, TMFeEquipment* eq, AllowedHosts* hosts, const char* client_hostname, int debugMode = 0);
-   void Init(MVOdb* supervisor_settings_path);
-
-};
-
-class feGEMSupervisor :
-   public feGEMClass
-{
-public:
-   MVOdb* fOdbWorkers;
-
-   int fPortRangeStart;
-   int fPortRangeStop;
-
-   feGEMSupervisor(TMFE* mfe, TMFeEquipment* eq);
-
-   void Init();
-private:
-   std::vector<uint> RunningWorkers;
-public:
-   bool WorkerIsRunning(uint workerID)
-   {
-      for (auto& id: RunningWorkers)
-      {
-         if (id==workerID)
-         {
-            std::cout<<"Working is already runnning"<<std::endl;
-            return true;
-         }
-      }
-      std::cout<<"Working is not yet runnning"<<std::endl;
-      return false;
-   };
-   void WorkerStarted(uint workerID) { RunningWorkers.push_back(workerID); };
-   virtual int FindHostInWorkerList(const char* hostname);
-   virtual uint16_t AssignPortForWorker(uint workerID);
-   std::string BuildFrontendName(const char* hostname);
-   virtual const char* AddNewClient(const char* hostname);
-   
-   virtual void SetFEStatus()
-   {
-      size_t threads = RunningWorkers.size();
-      std::string status = 
-         "" + fMfe->fFrontendName + "@" + fMfe->fFrontendHostname +
-         " [" + std::to_string(threads) + " thread";
-      if (threads > 1)
-         status += "s";
-      status += "]";
-      fEq->SetStatus(status.c_str(), "greenLight");
-  }
-};
+#endif

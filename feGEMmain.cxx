@@ -1,4 +1,6 @@
-#include "feGEM.h"
+#include "feGEMClass.h"
+#include "feGEMWorker.h"
+#include "feGEMSupervisor.h"
 
 static void usage()
 {
