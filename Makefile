@@ -4,7 +4,7 @@ SRC_DIR   = $(MIDASSYS)/src
 
 CC     = gcc
 CFLAGS = -Wall -Wextra -O2 -g -Wall -DOS_LINUX -Dextname
-CFLAGS += -std=c++11 -Wall -O2 -g -I. -I$(INC_DIR) -I$(MIDASSYS)/mxml/ -I$(MIDASSYS)/mvodb/ -I$(MIDASSYS)/mjson/
+CFLAGS += -std=c++11 -Wall -O2 -g -Iinclude -IfeGEMAnalyzer -I$(INC_DIR) -I$(MIDASSYS)/mxml/ -I$(MIDASSYS)/mvodb/ -I$(MIDASSYS)/mjson/
 CFLAGS += $(PGFLAGS)
 LIBS = -lm -lz -lutil -lnsl -lpthread
 LIB = $(LIB_DIR)/libmidas.a -lrt
@@ -16,13 +16,14 @@ MODULES = $(LIB_DIR)/mfe.o
 
 all::feGEM.exe 
 
-feGEM.exe: %.exe: feGEMmain.o feGEMClass.o feGEMWorker.o feGEMSupervisor.o GEM_BANK.o MessageHandler.o AllowedHosts.o HistoryLogger.o PeriodicityManager.o SettingsFileDatabase.o
+feGEM.exe: %.exe: feGEMmain.o feGEMClass.o feGEMWorker.o feGEMSupervisor.o feGEMAnalyzer/GEM_BANK.o MessageHandler.o AllowedHosts.o HistoryLogger.o PeriodicityManager.o SettingsFileDatabase.o
 	$(CXX) -o $@ $^ $(CFLAGS) $(LIB) $(LDFLAGS) $(LIBS) -lssl -lcrypto
 
 
+feGEMAnalyzer/%.o: feGEMAnalyzer/%.cxx
+	$(CXX) -o $@ $(CFLAGS) -c $<
 
-
-%.o: %.cxx
+%.o: src/%.cxx
 	$(CXX) -o $@ $(CFLAGS) -c $<
 
 clean::
