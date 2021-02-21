@@ -45,13 +45,28 @@ void feGEMClass::SetFEStatus(int seconds_since_last_post)
    std::string status = "Rate limit set: " + std::to_string(fEventSize/1000) + "KiB/s";
    //The History logger sets negative time in its deconstructor (to set all status's grey when the frontend closes)
    if (seconds_since_last_post < 0)
-      fEq->SetStatus(status.c_str(), "mgray");
+   {
+      fEq->SetStatus("feGEM thread stopped", "mgray");
+   }
    else if (seconds_since_last_post < 100)
+   {
       fEq->SetStatus(status.c_str(), "greenLight");
-   else if ( seconds_since_last_post < 300)
+   }
+   else if (seconds_since_last_post < 300)
+   {
+      status += " [No data for ~" + std::to_string(seconds_since_last_post) + " s]";
+      fEq->SetStatus(status.c_str(), "greenLight");
+   }
+   else if ( seconds_since_last_post < 3600)
+   {
+      status += " [No data for ~" + std::to_string((int)(seconds_since_last_post/60)) + " mins]";
       fEq->SetStatus(status.c_str(), "yellowLight");
+   }
    else
+   {
+      status += " [No data for ~" + std::to_string((int)(seconds_since_last_post/3600)) + " hours]";
       fEq->SetStatus(status.c_str(), "redLight");
+   }
 }
 
 void feGEMClass::HandleCommandBank(const GEMDATA<char>* bank,const char* command, const char* hostname)
@@ -551,6 +566,7 @@ void feGEMClass::ServeHost()
    //printf("Thread %s, periodic!\n", TMFE::GetThreadId().c_str());
    //std::cout<<"periodic (port:"<<fPort<<")"<<std::endl;
    std::chrono::time_point<std::chrono::system_clock> timer_start=std::chrono::high_resolution_clock::now();
+
    //Check if we need to change the MIDAS event buffer size
    if (lastEventSize!=fEventSize)
    {
@@ -562,6 +578,21 @@ void feGEMClass::ServeHost()
          std::cout<<"Event buffer re-initialised "<<std::endl;
    }
    lastEventSize=fEventSize;
+
+   //Every 30s, Update the frontend status
+   if (feGEMClassType==WORKER)
+   {
+      std::chrono::duration<double> TimeSinceLastStatusUpdate = 
+         timer_start - LastStatusUpdate;
+
+      //Update the status less frequently that the actual data
+      if ( TimeSinceLastStatusUpdate.count() > 30 )
+      {
+         SetFEStatus((int)periodicity.SecondsSinceData());
+         LastStatusUpdate = timer_start;
+      }
+   }
+
    //Listen for TCP connections
    if (listen(server_fd, 3) < 0) 
    { 
@@ -747,15 +778,6 @@ void feGEMClass::ServeHost()
    
    shutdown(new_socket,SHUT_RD);
 
-   //Every 30s, Update the frontend status
-   std::chrono::duration<double, std::milli> TimeSinceLastStatusUpdate = LastStatusUpdate - timer_stop;
-   //Update the status less frequently that the actual data
-   if ( TimeSinceLastStatusUpdate.count() > 30 )
-   {
-      SetFEStatus((int)TimeSinceLastStatusUpdate.count());
-      LastStatusUpdate = timer_stop;
-   }
-   
    //zmq_send (responder, reply.c_str(), reply.size(), 0);
    if (KillFrontend)
    {

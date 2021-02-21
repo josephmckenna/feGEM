@@ -20,7 +20,8 @@ class PeriodicityManager
 
    MVOdb* fOdbStatistics; 
 
-
+   //Used to track how much time it has been since we saw data
+   std::chrono::time_point<std::chrono::system_clock> TimeOfLastData;
 
    public:
    PeriodicityManager(TMFE* mfe,TMFeEquipment* eq);
@@ -35,6 +36,15 @@ class PeriodicityManager
    void UpdatePerodicity();
    void ProcessMessage(GEMBANK<char>* bank);
    const int GetWaitPeriod() { return fPeriod; }
+   
+   double SecondsSinceData()
+   {
+        std::chrono::time_point<std::chrono::system_clock> timer_start = 
+           std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> TimeSinceLastStatusUpdate = 
+           timer_start - TimeOfLastData;
+        return TimeSinceLastStatusUpdate.count();
+   }
 };
 
 #endif

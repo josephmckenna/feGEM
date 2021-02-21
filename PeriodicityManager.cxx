@@ -54,6 +54,8 @@ void PeriodicityManager::AddRemoteCaller(char* prog)
 
 void PeriodicityManager::LogPeriodicWithData()
 {
+   TimeOfLastData = std::chrono::high_resolution_clock::now();
+   
    WriteGEMBankStatistics();
    fPeriodicWithData++;
    // Every 1000 events, check that we are have more polls that data being sent 
