@@ -85,7 +85,7 @@ class AllowedHosts
    bool AddHost(const char* hostname);
    //Ban this host:
    bool BanHost(const char* hostname);
-   const bool SelfRegistrationIsAllowed() { return allow_self_registration; }
+   bool SelfRegistrationIsAllowed() const { return allow_self_registration; }
    private:
    bool IsListedAsAllowed(const char* hostname);
    bool IsListedAsBanned(const char* hostname);

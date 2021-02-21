@@ -124,21 +124,21 @@ class GEMDATA {
    uint32_t GetEntries(uint32_t size) const  { return (size-GetHeaderSize())/sizeof(T);      }
    
    //LabVIEW timestamp is Big Endian... convert when reading, store as orignal data (BigEndian)
-   const int64_t GetLabVIEWCoarseTime(uint16_t Endianess) const 
+   int64_t GetLabVIEWCoarseTime(uint16_t Endianess) const 
    { 
       if (Endianess!=LittleEndian)
          return change_endian(timestamp.Seconds);
       else
          return timestamp.Seconds;
    }
-   const uint64_t GetLabVIEWFineTime(uint16_t Endianess) const
+   uint64_t GetLabVIEWFineTime(uint16_t Endianess) const
    {
       if (Endianess!=LittleEndian)
          return change_endian(timestamp.SubSecondFraction);
       else
          return timestamp.SubSecondFraction;
    }
-   const int64_t GetUnixTimestamp(uint16_t Endianess) const
+   int64_t GetUnixTimestamp(uint16_t Endianess) const
    {
       if (Endianess!=LittleEndian)
          return change_endian(timestamp.Seconds)-2082844800;
@@ -162,7 +162,7 @@ class BANK_TITLE {
       printf("  Variable:%.16s/%.16s\n",GetCategoryName().c_str(),GetVariableName().c_str());
       printf("  EquipmentType:%.32s\n",GetEquipmentType().c_str());
    }
-   const std::string SanitiseBankString(const char* input, int assert_size=0) const
+   std::string SanitiseBankString(const char* input, int assert_size=0) const
    {
       //std::cout<<input;
       const int input_size=strlen(input);
@@ -309,8 +309,8 @@ class GEMBANK {
    }
    const GEMDATA<T>* GetLastDataEntry() const { return GetDataEntry(NumberOfEntries-1); }
 
-   const int64_t GetFirstUnixTimestamp() const { return GetFirstDataEntry()->GetUnixTimestamp(TimestampEndianness); }
-   const int64_t GetLastUnixTimestamp() const  { return GetLastDataEntry()->GetUnixTimestamp(TimestampEndianness);  }
+   int64_t GetFirstUnixTimestamp() const { return GetFirstDataEntry()->GetUnixTimestamp(TimestampEndianness); }
+   int64_t GetLastUnixTimestamp() const  { return GetLastDataEntry()->GetUnixTimestamp(TimestampEndianness);  }
 };
 static_assert(sizeof(GEMBANK<void*>)==88,"BANKBANK must be 88 bytes... compiler issues likely");
 

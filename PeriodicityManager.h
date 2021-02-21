@@ -35,7 +35,7 @@ class PeriodicityManager
 
    void UpdatePerodicity();
    void ProcessMessage(GEMBANK<char>* bank);
-   const int GetWaitPeriod() { return fPeriod; }
+   int GetWaitPeriod() const { return fPeriod; }
    
    double SecondsSinceData()
    {
