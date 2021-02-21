@@ -150,6 +150,7 @@ public:
    void WorkerStarted(uint workerID) { RunningWorkers.push_back(workerID); };
    virtual int FindHostInWorkerList(const char* hostname);
    virtual uint16_t AssignPortForWorker(uint workerID);
+   std::string BuildFrontendName(const char* hostname);
    virtual const char* AddNewClient(const char* hostname);
    
    virtual void SetFEStatus()

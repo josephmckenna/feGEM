@@ -224,7 +224,6 @@ void feGEMClass::HandleCommandBank(const GEMDATA<char>* bank,const char* command
       SetFEStatus();
       return;
    }
-
    else
    {
       std::cout<<"Command not understood!"<<std::endl;
@@ -242,7 +241,6 @@ void feGEMClass::HandleFileBank(GEMBANK<char>* bank,const char* hostname)
    const char* file_data = &gem_data->DATA[0];
    std::cout<<file_data<<std::endl;
    return;     
-  
 }
 
 void feGEMClass::HandleStrArrayBank(GEMBANK<char>* bank)
@@ -266,9 +264,7 @@ void feGEMClass::HandleStrArrayBank(GEMBANK<char>* bank)
             last_char_was_null = true;
          }
       }
-      
 
-      
       std::cout<<"Writing \"";
       size_t max_len=0;
       for (std::string line: array)
@@ -347,8 +343,6 @@ void feGEMClass::HandleStrBank(GEMBANK<char>* bank, const char* hostname)
          return SettingsDataBase->ListSettingsFile(bank,&message);
       }
    }
-  
-   
    //Put every UTF-8 character into a string and send it as JSON
    else
    {
@@ -565,7 +559,8 @@ void feGEMClass::ServeHost()
    //if (fPort!=5555)
    //printf("Thread %s, periodic!\n", TMFE::GetThreadId().c_str());
    //std::cout<<"periodic (port:"<<fPort<<")"<<std::endl;
-   std::chrono::time_point<std::chrono::system_clock> timer_start=std::chrono::high_resolution_clock::now();
+   std::chrono::time_point<std::chrono::system_clock> timer_start = 
+      std::chrono::high_resolution_clock::now();
 
    //Check if we need to change the MIDAS event buffer size
    if (lastEventSize!=fEventSize)
@@ -896,7 +891,6 @@ feGEMSupervisor::feGEMSupervisor(TMFE* mfe, TMFeEquipment* eq): feGEMClass(mfe,e
    fEventSize = 10000;
    fEventBuf  = NULL;
 
-
    HistoryVariable::gHistoryPeriod = 10;
    //So far... limit to 1000 frontend workers...
    fPortRangeStart = 13000;
@@ -916,6 +910,7 @@ feGEMSupervisor::feGEMSupervisor(TMFE* mfe, TMFeEquipment* eq): feGEMClass(mfe,e
    }
    fPort=12345;
 }
+
 void feGEMSupervisor::Init()
 {
    fEq->fOdbEqSettings->RI("event_size", &fEventSize, true);
@@ -924,6 +919,21 @@ void feGEMSupervisor::Init()
    fEq->fOdbEqSettings->RI("DefaultHistoryPeriod",&HistoryVariable::gHistoryPeriod,true);
    assert(fPort>0);
    fOdbWorkers=fEq->fOdbEqSettings->Chdir("WorkerList",true);
+   
+   //Load list of hosts that have logged to MIDAS at some point
+   std::vector<std::string> hostlist={"local_host"};
+   fOdbWorkers->RSA("HostName", &hostlist,true,0,64);
+   //Loop over all hosts and 'clear' the frontend status
+   for (const std::string& host: hostlist)
+   {
+      std::string feName = BuildFrontendName(host.c_str());
+      std::string status = "feGEM thread not running";
+      std::string odb_path="Equipment/" + feName + "/Common/Status";
+      fMfe->fOdbRoot->WS(odb_path.c_str(),status.c_str());
+      odb_path += " color";
+      fMfe->fOdbRoot->WS(odb_path.c_str(),"mgray");
+   }
+   
    //fOdbWorkers->WS("HostName","",32);
    std::vector<uint32_t> DataAdded;
    fOdbWorkers->RU32A("DateAdded", &DataAdded, true, 1);
@@ -989,6 +999,24 @@ uint16_t feGEMSupervisor::AssignPortForWorker(uint workerID)
    }
 }
 
+std::string feGEMSupervisor::BuildFrontendName(const char* hostname)
+{
+   std::string name = "feGEM_";
+   name+=hostname;
+   if (name.size()>(31 - 4))
+      {
+         fMfe->Msg(MERROR, name.c_str(), "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
+         std::string tmp=name;
+         name.clear();
+         for (int i=0; i<(31 - 4); i++)
+         {
+            name+=tmp[i];
+         }
+         fMfe->Msg(MERROR, name.c_str(), "Frontend name [%s] too long. Shortenening hostname to [%s]", tmp.c_str(), name.c_str());
+         //exit(1);
+      }
+   return name;
+}
 const char* feGEMSupervisor::AddNewClient(const char* hostname)
 {
    std::cout<<"Adding host:"<<hostname<<std::endl;
@@ -1000,21 +1028,9 @@ const char* feGEMSupervisor::AddNewClient(const char* hostname)
    {
       WorkerStarted(WorkerNo);
       //allowed_hosts->AddHost(hostname);
-      std::string name = "feGEM_";
-      name+=hostname;
+      std::string name = BuildFrontendName(hostname);
       TMFE* mfe=fMfe;
-      if (name.size()>(31 - 4))
-      {
-         mfe->Msg(MERROR, name.c_str(), "Frontend name [%s] too long. Perhaps shorten hostname", name.c_str());
-         std::string tmp=name;
-         name.clear();
-         for (int i=0; i<(31 - 4); i++)
-         {
-            name+=tmp[i];
-         }
-         mfe->Msg(MERROR, name.c_str(), "Frontend name [%s] too long. Shortenening hostname to [%s]", tmp.c_str(), name.c_str());
-         //exit(1);
-      }
+      
       TMFeCommon *common = new TMFeCommon();
       common->EventID = 1;
       common->LogHistory = 1;
