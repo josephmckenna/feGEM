@@ -10,6 +10,7 @@
 #include "GEM_BANK_flow.h"
 
 #include "TTree.h"
+#include "TBranch.h"
 
 #include "manalyzer.h"
 #include "midasio.h"
