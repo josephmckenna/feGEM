@@ -266,7 +266,9 @@ public:
    feGEMModule(TARunInfo* runinfo, feGEMModuleFlags* flags)
       : TARunObject(runinfo), fFlags(flags)
    {
+#ifdef MANALYZER_PROFILER
       ModuleName="feGEM_module";
+#endif      
       writer = new feGEMModuleWriter();
       if (fTrace)
          printf("feGEMModule::ctor!\n");
