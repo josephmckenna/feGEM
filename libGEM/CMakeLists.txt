@@ -51,6 +51,10 @@ target_include_directories(GEM PUBLIC include)
 
 target_link_libraries(GEM ${ROOT_LIBRARIES} )
 
+add_executable(test src/test.cxx)
+target_include_directories(test PUBLIC include)
+target_link_libraries(test PUBLIC GEM)
+
 install(TARGETS GEM DESTINATION lib)
 install(FILES ${PROJECT_BINARY_DIR}/libGEM_rdict.pcm DESTINATION lib)
 install(FILES ${PROJECT_BINARY_DIR}/libGEM.rootmap DESTINATION lib)
