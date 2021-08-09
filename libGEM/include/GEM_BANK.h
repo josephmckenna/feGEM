@@ -293,7 +293,12 @@ class GEMBANK {
       NumberOfEntries=-1;
    }
 
-   const GEMDATA<T>* GetFirstDataEntry() const { return (GEMDATA<T>*)this + sizeof(GEMBANK); }
+   const GEMDATA<T>* GetFirstDataEntry() const
+   {
+      char* ptr = (char*)this;
+      ptr += sizeof(GEMBANK);
+       return (GEMDATA<T>*)ptr;
+   }
    
    uint32_t GetSizeOfDataArray() const
    {
