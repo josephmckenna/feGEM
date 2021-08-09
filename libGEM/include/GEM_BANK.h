@@ -297,7 +297,7 @@ class GEMBANK {
    {
       char* ptr = (char*)this;
       ptr += sizeof(GEMBANK);
-       return (GEMDATA<T>*)ptr;
+      return (GEMDATA<T>*)ptr;
    }
    
    uint32_t GetSizeOfDataArray() const
